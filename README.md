@@ -155,7 +155,7 @@ iteration_plan:
 
 ## Ollama + manifest llm yaml
 
-Oczywiście! Oto przewodnik krok po kroku, jak rozpocząć pracę z Ollama i manifestami YAML, aby efektywnie zarządzać iteracjami w projektach programistycznych.
+jak rozpocząć pracę z Ollama i manifestami YAML, aby efektywnie zarządzać iteracjami w projektach programistycznych?
 
 ---
 
@@ -268,11 +268,7 @@ Efekt: LLM wygeneruje **iteracyjny plan działań**, uwzględniający priorytety
 
 
 
-
-
-
-
-Świetnie! Przygotuję kompletny workflow, który w jednej linijce lub jednym skrypcie:
+## Projekt
 
 1. Zbiera raporty z testów i lintów.
 2. Scala je z manifestem YAML.
