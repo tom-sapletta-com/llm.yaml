@@ -1,32 +1,23 @@
-#!/usr/bin/env bash
-# run_tests.sh – executes the analysis tools defined in manifest.yaml
-# This script is a simple wrapper; it does not parse the manifest, it just runs the common tools.
-# Adjust paths if your project layout differs.
-
+#!/bin/bash
 set -e
 
-# Run pytest (assumes tests are in ./tests)
-if command -v pytest >/dev/null 2>&1; then
-  echo "Running pytest..."
-  pytest tests/ || true
+echo "Running pytest..."
+if [ -d "tests" ]; then
+    python -m pytest tests/ -v
 else
-  echo "pytest not found – skipping."
+    echo "No tests/ directory found. Skipping pytest."
 fi
 
-# Run flake8 on src directory
-if command -v flake8 >/dev/null 2>&1; then
-  echo "Running flake8..."
-  flake8 src/ || true
+echo -e "\nRunning flake8..."
+if [ -d "src" ]; then
+    flake8 src/ || true
 else
-  echo "flake8 not found – skipping."
+    echo "No src/ directory found. Skipping flake8."
 fi
 
-# Run mypy on src directory
-if command -v mypy >/dev/null 2>&1; then
-  echo "Running mypy..."
-  mypy src/ || true
+echo -e "\nRunning mypy..."
+if [ -d "src" ]; then
+    mypy src/ || true
 else
-  echo "mypy not found – skipping."
+    echo "No src/ directory found. Skipping mypy."
 fi
-
-echo "All analysis tools have been executed."
