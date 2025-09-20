@@ -1037,6 +1037,18 @@ chatai run --prompt-file prompt_from_ymll.txt
 
 
 
+# v4 
+
+**developer wskazuje tylko manifest**, a cały workflow – analiza błędów, generowanie promptu, wywołanie `chatai`, tworzenie nowej iteracji, aktualizacja mapy i archiwizacja – odbywa się automatycznie.
+
+## Zalety tego rozwiązania
+
+* Developer **wskazuje tylko manifest** – resztę wykonuje automatycznie skrypt `ymll`.
+* **Automatyczne generowanie promptu dla `chatai`** uwzględnia manifest i wyniki narzędzi testowych.
+* **Tworzenie nowej iteracji i manifestu** w pełni automatyczne.
+* **Archiwizacja starych iteracji** utrzymuje porządek w projekcie.
+* **Aktualizacja mapy iteracji** pozwala śledzić historię i zależności między iteracjami.
+
 
 ## Struktura projektu
 
@@ -1058,28 +1070,20 @@ ExampleProject/
 ```
 
 
-* Developer **nie musi ręcznie analizować błędów** ani aktualizować iteracji.
-* **Automatyczne generowanie promptu** dla `chatai` na podstawie manifestu i wyników testów/lintów.
-* **Archiwizacja starych iteracji** zachowuje historię, a główna struktura pozostaje czytelna.
-* **Aktualizacja mapy iteracji** pozwala na śledzenie historii i zależności między iteracjami.
-* Workflow jest **bezobsługowy**, bez konieczności ręcznego kopiowania, uruchamiania narzędzi czy tworzenia folderów.
-
-
-
-
-## End-to-End Workflow z chatai
+## Workflow: manifest → analiza → prompt → chatai → nowa iteracja → mapa → archiwizacja
 
 ```
-+---------------------+
-|  Developer wskazuje |
-|   manifest.yaml     |
-+---------+-----------+
++----------------------+
+|  Developer wskazuje  |
+|   manifest.yaml      |
++---------+------------+
           |
           v
 +---------------------------+
 |  Skrypt ymll/run_analysis |
 |  - Wczytuje manifest      |
 |  - Uruchamia testy i lint |
+|    (pytest, flake8, mypy) |
 |  - Timeout dla narzędzi   |
 |  - Zbiera wyniki analizy  |
 +------------+--------------+
@@ -1094,23 +1098,23 @@ ExampleProject/
 +------------+----------------+
              |
              v
-+----------------------------+
-|  Wywołanie chatai          |
-|  - chatai run --prompt-file|
-|    prompt_for_chatai.txt   |
-|  - LLM generuje plan       |
-|    kolejnej iteracji,      |
-|    sugestie napraw         |
-+------------+---------------+
++-----------------------------+
+|  Wywołanie chatai           |
+|  - chatai run --prompt-file |
+|    prompt_for_chatai.txt    |
+|  - LLM generuje plan        |
+|    kolejnej iteracji,       |
+|    sugestie napraw          |
++------------+----------------+
              |
              v
-+----------------------------+
-|  Tworzenie nowej iteracji  |
-|  - Folder zgodny z wzorcem |
-|  - Kopiowanie common/      |
-|  - Tworzenie manifestu     |
-|    nowej iteracji          |
-+------------+---------------+
++-----------------------------+
+|  Tworzenie nowej iteracji   |
+|  - Folder zgodny z wzorcem  |
+|  - Kopiowanie common/       |
+|  - Tworzenie manifestu      |
+|    nowej iteracji           |
++------------+----------------+
              |
              v
 +-----------------------------------+
@@ -1126,46 +1130,14 @@ ExampleProject/
 +---------------------------+
 ```
 
----
 
-## Szczegóły workflow z `chatai`
+## Kluczowe punkty diagramu
 
-1. **Developer wskazuje tylko manifest**:
-
-```bash
-python ymll/run_analysis.py
-```
-
-* Skrypt uruchamia testy (`pytest`), linty (`flake8`), typy (`mypy`) z timeoutami.
-* Zbiera wyniki i generuje prompt dla `chatai` w pliku `prompt_for_chatai.txt`.
-
-2. **Wywołanie LLM (`chatai`)**:
-
-```bash
-chatai run --prompt-file prompt_for_chatai.txt
-```
-
-* `chatai` generuje plan kolejnej iteracji i rekomendacje napraw.
-* LLM nie musi znać struktury projektu ani narzędzi – wszystko jest w prompt.
-
-3. **Tworzenie nowej iteracji**:
-
-* Folder według schematu: `iteration_{number}_{feature}_v{version}`.
-* Kopiowanie wspólnych funkcji z `common/`.
-* Tworzenie nowego manifestu iteracji na podstawie szablonu w `manifest.yaml`.
-
-4. **Aktualizacja mapy iteracji i archiwizacja**:
-
-* `iterations_map.yaml` zostaje zaktualizowane o nową iterację.
-* Stare iteracje przenoszone są do `archive/` z timestampem.
-* Zachowujemy pełną historię projektu bez zaśmiecania głównej struktury.
-
-
-
-# v4 
-
- **developer wskazuje tylko manifest**, a cały workflow – analiza błędów, generowanie promptu, wywołanie `chatai`, tworzenie nowej iteracji, aktualizacja mapy i archiwizacja – odbywa się automatycznie.
-
+1. **Minimalna praca developera** – wskazanie jedynie `manifest.yaml`.
+2. **Automatyczna analiza błędów** – `ymll/run_analysis.py` uruchamia narzędzia, zbiera wyniki, generuje prompt.
+3. **Generowanie promptu dla `chatai`** – pełen kontekst: manifest + raporty testów.
+4. **Tworzenie nowej iteracji** – nowy folder, manifest, kopiowanie wspólnych funkcji.
+5. **Aktualizacja mapy iteracji i archiwizacja** – porządek w projekcie, zachowanie historii.
 
 ## Pliki
 
@@ -1342,11 +1314,19 @@ print("Mapa iteracji została zaktualizowana i stare iteracje zostały zarchiwiz
 python ymll/run_analysis.py
 ```
 
+* Skrypt uruchamia testy (`pytest`), linty (`flake8`), typy (`mypy`) z timeoutami.
+* Zbiera wyniki i generuje prompt dla `chatai` w pliku `prompt_for_chatai.txt`.
+
+
 2. **Uruchomienie `chatai` z wygenerowanym promptem:**
 
 ```bash
 chatai run --prompt-file prompt_for_chatai.txt
 ```
+
+* `chatai` generuje plan kolejnej iteracji i rekomendacje napraw.
+* LLM nie musi znać struktury projektu ani narzędzi – wszystko jest w prompt.
+
 
 3. **Aktualizacja mapy iteracji i archiwizacja starych iteracji:**
 
@@ -1354,84 +1334,11 @@ chatai run --prompt-file prompt_for_chatai.txt
 python ymll/update_iterations.py
 ```
 
----
+* Folder według schematu: `iteration_{number}_{feature}_v{version}`.
+* Kopiowanie wspólnych funkcji z `common/`.
+* Tworzenie nowego manifestu iteracji na podstawie szablonu w `manifest.yaml`.
+* `iterations_map.yaml` zostaje zaktualizowane o nową iterację.
+* Stare iteracje przenoszone są do `archive/` z timestampem.
+* Zachowujemy pełną historię projektu bez zaśmiecania głównej struktury.
 
-## Zalety tego rozwiązania
-
-* Developer **wskazuje tylko manifest** – resztę wykonuje automatycznie skrypt `ymll`.
-* **Automatyczne generowanie promptu dla `chatai`** uwzględnia manifest i wyniki narzędzi testowych.
-* **Tworzenie nowej iteracji i manifestu** w pełni automatyczne.
-* **Archiwizacja starych iteracji** utrzymuje porządek w projekcie.
-* **Aktualizacja mapy iteracji** pozwala śledzić historię i zależności między iteracjami.
-
-
-
-## Workflow: manifest → analiza → prompt → chatai → nowa iteracja → mapa → archiwizacja
-
-```
-+----------------------+
-|  Developer wskazuje  |
-|   manifest.yaml      |
-+---------+------------+
-          |
-          v
-+---------------------------+
-|  Skrypt ymll/run_analysis |
-|  - Wczytuje manifest      |
-|  - Uruchamia testy i lint |
-|    (pytest, flake8, mypy) |
-|  - Timeout dla narzędzi   |
-|  - Zbiera wyniki analizy  |
-+------------+--------------+
-             |
-             v
-+-----------------------------+
-|  Generowanie promptu dla    |
-|  chatai                     |
-|  - Uwzględnia manifest      |
-|  - Uwzględnia wyniki testów |
-|  - Tworzy kompletny kontekst|
-+------------+----------------+
-             |
-             v
-+-----------------------------+
-|  Wywołanie chatai           |
-|  - chatai run --prompt-file |
-|    prompt_for_chatai.txt    |
-|  - LLM generuje plan        |
-|    kolejnej iteracji,       |
-|    sugestie napraw          |
-+------------+----------------+
-             |
-             v
-+-----------------------------+
-|  Tworzenie nowej iteracji   |
-|  - Folder zgodny z wzorcem  |
-|  - Kopiowanie common/       |
-|  - Tworzenie manifestu      |
-|    nowej iteracji           |
-+------------+----------------+
-             |
-             v
-+-----------------------------------+
-|  Aktualizacja iterations_map.yaml |
-|  - Dodanie nowej iteracji         |
-|  - Archiwizacja starych iteracji  |
-+------------+----------------------+
-             |
-             v
-+---------------------------+
-|  Gotowe do uruchomienia   |
-|  kolejnej iteracji        |
-+---------------------------+
-```
-
-
-## Kluczowe punkty diagramu
-
-1. **Minimalna praca developera** – wskazanie jedynie `manifest.yaml`.
-2. **Automatyczna analiza błędów** – `ymll/run_analysis.py` uruchamia narzędzia, zbiera wyniki, generuje prompt.
-3. **Generowanie promptu dla `chatai`** – pełen kontekst: manifest + raporty testów.
-4. **Tworzenie nowej iteracji** – nowy folder, manifest, kopiowanie wspólnych funkcji.
-5. **Aktualizacja mapy iteracji i archiwizacja** – porządek w projekcie, zachowanie historii.
 
