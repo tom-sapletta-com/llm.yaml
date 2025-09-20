@@ -1,0 +1,38 @@
+Analizuj projekt ExampleProject
+Vector of expectations: Uproszczenie kodu, automatyzacja testów, izolacja funkcjonalności
+Iteracja: 3
+Feature: FeatureX
+
+Analiza wyników narzędzi:
+
+Tool: pytest
+Return code: 4
+Output:
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-8.4.2, pluggy-1.6.0
+rootdir: /home/tom/github/tom-sapletta-com/ymll
+plugins: cov-6.1.1, asyncio-1.1.0, anyio-4.10.0
+asyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 0 items
+
+============================ no tests ran in 0.02s =============================
+
+ERROR: file or directory not found: tests/
+
+
+
+Tool: flake8
+Return code: 1
+Output:
+src/:0:1: E902 FileNotFoundError: [Errno 2] No such file or directory: 'src/'
+
+
+
+Tool: mypy
+Return code: 2
+Output:
+
+mypy: can't read file 'src': No such file or directory
+
+
+Na podstawie powyższych informacji wygeneruj plan kolejnej iteracji oraz sugestie napraw.

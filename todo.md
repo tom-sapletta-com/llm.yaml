@@ -1,6 +1,7 @@
 Wygeneruj ponzisze pliki i przetestuj
 
-
+dodaj plik Makefile z funkcjami jak install, publish, test, run, itd
+wygeneruj testy, prztetsuj i opublikuj
 
 **developer wskazuje tylko manifest**, a cały workflow – analiza błędów, generowanie promptu, wywołanie `chatai`, tworzenie nowej iteracji, aktualizacja mapy i archiwizacja – odbywa się automatycznie.
 
