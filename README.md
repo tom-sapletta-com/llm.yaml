@@ -72,7 +72,8 @@ project_manifest:
       title: "Specyfikacja to dopiero początek"
       description: "Sama specyfikacja nie wystarcza. Należy wskazać wektor rozwoju i priorytety."
       priority: high
-      actions:
+      LLM_hint: "Skup się na określeniu kierunku rozwoju projektu."
+      example_use: |
         - "Określ kierunek rozwoju projektu."
         - "Zidentyfikuj funkcje i moduły kluczowe dla obecnej iteracji."
 
@@ -80,7 +81,8 @@ project_manifest:
       title: "Refaktoryzacja generuje górkę zadań"
       description: "Refaktoryzacja często ujawnia dodatkowe wymagania i testy."
       priority: medium
-      actions:
+      LLM_hint: "Zidentyfikuj nowe testy potrzebne do poprawnej refaktoryzacji."
+      example_use: |
         - "Zidentyfikuj nowe testy potrzebne do poprawnej refaktoryzacji."
         - "Oceń, czy warto kontynuować stary projekt, czy zacząć nowy."
 
@@ -88,7 +90,8 @@ project_manifest:
       title: "Nowy projekt vs kontynuacja"
       description: "Rozpoczęcie nowego projektu może być bardziej efektywne niż poprawa starego."
       priority: high
-      actions:
+      LLM_hint: "Oceń, czy lepiej rozpocząć nowy projekt, czy kontynuować obecny."
+      example_use: |
         - "Utwórz nową strukturę projektu, jeśli obecna jest zbyt złożona."
         - "Zachowaj doświadczenia z poprzednich iteracji w dokumentacji."
 
@@ -96,7 +99,8 @@ project_manifest:
       title: "Iteracje jako nowe foldery/projekty"
       description: "Każda iteracja powinna być osobnym projektem, unikając zmiany starych plików."
       priority: high
-      actions:
+      LLM_hint: "Twórz nowy folder dla każdej iteracji."
+      example_use: |
         - "Twórz nowy folder dla każdej iteracji."
         - "Podziel problem na mniejsze zadania realizowane w nowych strukturach."
 
@@ -104,7 +108,8 @@ project_manifest:
       title: "Niepowodzenia kształtują kierunek rozwoju"
       description: "Błędy i nieudane iteracje są źródłem informacji o kierunku prac."
       priority: medium
-      actions:
+      LLM_hint: "Dokumentuj niepowodzenia i wyciągaj z nich wnioski."
+      example_use: |
         - "Dokumentuj niepowodzenia i wyciągaj z nich wnioski."
         - "Uaktualniaj wektor oczekiwań na podstawie doświadczeń."
 
@@ -112,9 +117,11 @@ project_manifest:
       title: "Manifest jako przewodnik LLM"
       description: "Zasady manifestu pomagają LLM w efektywnej realizacji zadań."
       priority: high
-      actions:
+      LLM_hint: "Dziel problemy na mniejsze, łatwiejsze do wykonania zadania."
+      example_use: |
         - "Dziel problemy na mniejsze, łatwiejsze do wykonania zadania."
         - "Realizuj zadania w nowych folderach, aby minimalizować kontekst z poprzednich iteracji."
+
 ```
 
 
