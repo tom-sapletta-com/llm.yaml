@@ -1,0 +1,43 @@
+# Manifest for the ExampleProject workflow
+project_manifest:
+  project_name: "ExampleProject"
+  description: "Projekt rozwijany iteracyjnie z LLM i automatyzacją analizy błędów"
+  vector_of_expectations: "Uproszczenie kodu, automatyzacja testów, izolacja funkcjonalności"
+
+iteration_template:
+  folder_pattern: "iteration_{number}_{feature}_{version}"
+  manifest_template:
+    iteration_number: 3
+    feature_name: "FeatureX"
+    version: 1
+    stable: false
+    parent_iteration: "iteration_2_FeatureX_v1"
+    notes: "Poprawa błędów i refaktoryzacja funkcji"
+  next_iteration_rules:
+    increment_version: true
+    new_feature: false
+    fork_sub_iteration_if_experimental: true
+
+structure_guidelines:
+  common_libraries:
+    folder: "common"
+    description: "Funkcje współdzielone"
+  tests:
+    folder: "tests"
+    description: "Testy wspólne i specyficzne dla iteracji"
+  rules:
+    avoid_duplicate_code: true
+    archive_old_iterations: true
+    version_files_instead_of_folders: true
+    lmm_generate_next_iteration: true
+
+analysis_tools:
+  - name: "pytest"
+    path: "tests/"
+    timeout: 30
+  - name: "flake8"
+    path: "src/"
+    timeout: 10
+  - name: "mypy"
+    path: "src/"
+    timeout: 10

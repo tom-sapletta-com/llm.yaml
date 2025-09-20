@@ -1,0 +1,3 @@
+# Iterations map – list of iteration entries
+# Each entry is a mapping with keys: iteration, folder, stable, parent_iteration, notes
+[]

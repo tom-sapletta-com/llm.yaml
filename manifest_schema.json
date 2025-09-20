@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Project Manifest Schema",
+  "type": "object",
+  "required": ["project_manifest", "iteration_template", "structure_guidelines"],
+  "properties": {
+    "project_manifest": {
+      "type": "object",
+      "required": ["project_name", "description", "vector_of_expectations"],
+      "properties": {
+        "project_name": {"type": "string"},
+        "description": {"type": "string"},
+        "vector_of_expectations": {"type": "string"}
+      }
+    },
+    "iteration_template": {
+      "type": "object",
+      "required": ["folder_pattern", "manifest_template", "next_iteration_rules"],
+      "properties": {
+        "folder_pattern": {"type": "string"},
+        "manifest_template": {
+          "type": "object",
+          "required": ["iteration_number", "feature_name", "version", "stable", "parent_iteration", "notes"],
+          "properties": {
+            "iteration_number": {"type": "string"},
+            "feature_name": {"type": "string"},
+            "version": {"type": "string"},
+            "stable": {"type": "boolean"},
+            "parent_iteration": {"type": "string"},
+            "notes": {"type": "string"}
+          }
+        },
+        "next_iteration_rules": {
+          "type": "object",
+          "properties": {
+            "increment_version": {"type": "boolean"},
+            "new_feature": {"type": "boolean"},
+            "fork_sub_iteration_if_experimental": {"type": "boolean"}
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "structure_guidelines": {
+      "type": "object",
+      "required": ["common_libraries", "tests", "rules"],
+      "properties": {
+        "common_libraries": {
+          "type": "object",
+          "required": ["folder", "description"],
+          "properties": {
+            "folder": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        },
+        "tests": {
+          "type": "object",
+          "required": ["folder", "description"],
+          "properties": {
+            "folder": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        },
+        "rules": {
+          "type": "object",
+          "required": ["avoid_duplicate_code", "archive_old_iterations", "version_files_instead_of_folders", "lmm_generate_next_iteration"],
+          "properties": {
+            "avoid_duplicate_code": {"type": "boolean"},
+            "archive_old_iterations": {"type": "boolean"},
+            "version_files_instead_of_folders": {"type": "boolean"},
+            "lmm_generate_next_iteration": {"type": "boolean"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

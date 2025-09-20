@@ -1350,7 +1350,7 @@ katalog projektu z gotowymi skryptami instalacyjnymi i uruchomieniowymi dla wszy
 Oto projektowa struktura katalogu:
 
 ```
-ai_project/
+llm/
 ├─ aichat/
 │  ├─ setup.sh
 │  └─ run.sh
