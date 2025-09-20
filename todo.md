@@ -433,6 +433,12 @@ python ymll/update_iterations.py
 
 
 
+
+
+
+
+wygeneruj wedle struktury pliki i zawartosci z dokumentacji
+
 ## LLM
 
 katalog projektu z gotowymi skryptami instalacyjnymi i uruchomieniowymi dla wszystkich narzędzi CLI, tak aby działały niezależnie od dystrybucji Linuxa. Zrobimy to z użyciem **uniwersalnych poleceń** (`curl`, `pip`, `npm`, `xdg-open`) i sprawdzaniem systemu, aby `xdg-open` działało też na macOS (`open`).
