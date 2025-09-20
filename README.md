@@ -613,3 +613,282 @@ mkdir -p $(cat plan.yaml | grep 'folder_name' | awk '{print $2}')
 * [Getting started with Ollama for Python](https://github.com/RamiKrispin/ollama-poc)
 * [Step-by-Step Guide: Running LLM Models with Ollama](https://dev.to/snehalkadwe/how-to-setup-ollma-and-llm-4601)
 
+
+
+
+
+
+# Dokumentacja: Iteracyjne tworzenie projektów z LLM i manifestem YAML
+
+## Cel
+
+Celem jest stworzenie **systemu iteracyjnego rozwoju oprogramowania**, który umożliwia:
+
+* Tworzenie kolejnych wersji funkcjonalności w uporządkowany sposób.
+* Automatyzację testów, lintów i planowania działań przez LLM.
+* Minimalizację duplikacji kodu i chaosu w strukturze folderów.
+* Utrzymanie historii i archiwizację starych iteracji.
+
+---
+
+## Kluczowe zasady
+
+1. **Manifest YAML** jest centralnym punktem kontroli:
+
+   * Opisuje każdą iterację lub funkcjonalność.
+   * Zawiera informacje o `parent_iteration`, `version`, `vector_of_expectations` i notatki.
+   * Może definiować **generyczny schemat tworzenia kolejnych iteracji**.
+
+2. **Izolacja iteracji i funkcjonalności**:
+
+   * Każda iteracja może być folderem, modułem lub artefaktem (mikro-usługa, kontener, FaaS).
+   * Wspólne funkcje umieszczamy w `common/`.
+
+3. **Automatyzacja**:
+
+   * Skrypty zbierają raporty testów/lintów, integrują je z manifestem i przekazują do LLM.
+   * LLM generuje plan kolejnej iteracji, strukturę folderów i manifest.
+
+4. **Porządek i archiwizacja**:
+
+   * Starsze iteracje kompresujemy lub przenosimy do `archive/`.
+   * Można wersjonować pliki zamiast tworzyć nowe foldery dla drobnych zmian.
+
+5. **Minimalizacja duplikacji**:
+
+   * Dziedziczenie funkcji z `common/`.
+   * Manifesty i LLM sugerują, które funkcje można odziedziczyć, zamiast kopiować.
+
+---
+
+## Obawy użytkownika i rozwiązania
+
+| Obawa                         | Rozwiązanie praktyczne                                                                   |
+| ----------------------------- | ---------------------------------------------------------------------------------------- |
+| Zbyt wiele folderów           | Scal stabilne iteracje, wersjonowanie plików, archiwizacja eksperymentalnych iteracji.   |
+| Duplikacja kodu               | `common/` dla funkcji współdzielonych, LLM sugeruje odziedziczenie.                      |
+| Nieefektywna refaktoryzacja   | Automatyzacja z LLM, manifest pokazuje zależności między iteracjami.                     |
+| Zarządzanie testami           | Wspólne testy w `tests/common`, specyficzne w iteracji. CI/CD automatyzuje uruchomienie. |
+| Historia zmian                | Git + manifest + iterations\_map.yaml → łatwa kontrola kolejnych iteracji.               |
+| Łączenie funkcjonalności      | Manifesty i sub-iteracje pokazują zależności i powiązania.                               |
+| Zarządzanie manifestem        | Manifest centralizuje metadane iteracji i schemat generowania kolejnych.                 |
+| Automatyzacja workflow        | Skrypty zbierają dane, LLM generuje plan, manifest i strukturę folderów.                 |
+| Archiwizacja starych iteracji | Kompresja, `archive/`, Git, Git LFS dla dużych plików.                                   |
+| Kontekst LLM                  | Manifest i podział na moduły/funkcje umożliwia analizę w ograniczonym kontekście.        |
+
+---
+
+## Struktura projektu (przykład)
+
+```
+ExampleProject/
+├── featureX_stable/
+│   ├── api_module_v3.py
+│   └── tests/
+├── featureY_stable/
+│   ├── api_module_v2.py
+│   └── tests/
+├── common/
+│   └── utils.py
+├── iterations_map.yaml
+├── manifest.yaml
+└── archive/
+    ├── featureX/
+    │   ├── iteration_1_failed/
+    │   └── iteration_2_partial/
+    └── featureY/
+        └── iteration_1/
+```
+
+## manifest YAML (generyczny schemat iteracji)
+
+```yaml
+project_manifest:
+  project_name: "ExampleProject"
+  description: "Generyczny schemat iteracyjnego rozwoju projektu z LLM"
+  vector_of_expectations: "Uproszczenie kodu, automatyzacja testów, izolacja funkcjonalności"
+
+iteration_template:
+  folder_pattern: "iteration_{number}_{feature}_{version}"
+  manifest_template:
+    iteration_number: "{number}"
+    feature_name: "{feature}"
+    version: "{version}"
+    stable: false
+    parent_iteration: "{parent_iteration}"
+    notes: "{notes}"
+  next_iteration_rules:
+    increment_version: true
+    new_feature: false
+    fork_sub_iteration_if_experimental: true
+
+structure_guidelines:
+  common_libraries:
+    folder: "common"
+    description: "Funkcje współdzielone"
+  tests:
+    folder: "tests"
+    description: "Testy wspólne i specyficzne dla iteracji"
+  rules:
+    avoid_duplicate_code: true
+    archive_old_iterations: true
+    version_files_instead_of_folders: true
+    lmm_generate_next_iteration: true
+```
+
+## 2️⃣ JSON Schema do walidacji manifestu
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Project Manifest Schema",
+  "type": "object",
+  "required": ["project_manifest", "iteration_template", "structure_guidelines"],
+  "properties": {
+    "project_manifest": {
+      "type": "object",
+      "required": ["project_name", "description", "vector_of_expectations"],
+      "properties": {
+        "project_name": {"type": "string"},
+        "description": {"type": "string"},
+        "vector_of_expectations": {"type": "string"}
+      }
+    },
+    "iteration_template": {
+      "type": "object",
+      "required": ["folder_pattern", "manifest_template", "next_iteration_rules"],
+      "properties": {
+        "folder_pattern": {"type": "string"},
+        "manifest_template": {
+          "type": "object",
+          "required": ["iteration_number", "feature_name", "version", "stable", "parent_iteration", "notes"],
+          "properties": {
+            "iteration_number": {"type": "string"},
+            "feature_name": {"type": "string"},
+            "version": {"type": "string"},
+            "stable": {"type": "boolean"},
+            "parent_iteration": {"type": "string"},
+            "notes": {"type": "string"}
+          }
+        },
+        "next_iteration_rules": {
+          "type": "object",
+          "properties": {
+            "increment_version": {"type": "boolean"},
+            "new_feature": {"type": "boolean"},
+            "fork_sub_iteration_if_experimental": {"type": "boolean"}
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "structure_guidelines": {
+      "type": "object",
+      "required": ["common_libraries", "tests", "rules"],
+      "properties": {
+        "common_libraries": {
+          "type": "object",
+          "required": ["folder", "description"],
+          "properties": {
+            "folder": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        },
+        "tests": {
+          "type": "object",
+          "required": ["folder", "description"],
+          "properties": {
+            "folder": {"type": "string"},
+            "description": {"type": "string"}
+          }
+        },
+        "rules": {
+          "type": "object",
+          "required": ["avoid_duplicate_code", "archive_old_iterations", "version_files_instead_of_folders", "lmm_generate_next_iteration"],
+          "properties": {
+            "avoid_duplicate_code": {"type": "boolean"},
+            "archive_old_iterations": {"type": "boolean"},
+            "version_files_instead_of_folders": {"type": "boolean"},
+            "lmm_generate_next_iteration": {"type": "boolean"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+
+## 3️⃣ Jak użyć schematu do walidacji
+
+### Python (przykład):
+
+```python
+import yaml
+import jsonschema
+
+# Wczytaj manifest YAML
+with open("manifest.yaml", "r") as f:
+    manifest = yaml.safe_load(f)
+
+# Wczytaj schemat JSON
+with open("manifest_schema.json", "r") as f:
+    schema = json.load(f)
+
+# Walidacja
+try:
+    jsonschema.validate(instance=manifest, schema=schema)
+    print("Manifest jest poprawny!")
+except jsonschema.exceptions.ValidationError as e:
+    print("Błąd w manifeście:", e)
+```
+
+---
+
+## Korzyści
+
+* Automatyczna walidacja manifestu przed użyciem przez LLM lub skrypty.
+* Zapobieganie błędom w polach manifestu i strukturze folderów.
+* Łatwe rozszerzenie schematu o dodatkowe reguły lub typy iteracji.
+* LLM może generować nową iterację i od razu sprawdzić poprawność YAML.
+
+
+
+## Workflow przykładowej iteracji
+
+1. Uruchomienie testów i lintów dla aktualnej iteracji:
+
+```bash
+bash run_tests.sh
+```
+
+2. Połączenie raportów z manifestem:
+
+```bash
+python collect_reports.py
+```
+
+3. LLM generuje plan kolejnej iteracji:
+
+```bash
+python generate_plan.py
+```
+
+4. Tworzenie nowego folderu/artefaktu zgodnie z manifestem szablonowym.
+5. Dodanie nowej iteracji do `iterations_map.yaml`.
+6. Archiwizacja starych eksperymentalnych iteracji.
+
+---
+
+## 7Korzyści
+
+* Porządek w wielu iteracjach i funkcjonalnościach.
+* Automatyzacja planowania kolejnych iteracji z LLM.
+* Minimalizacja duplikacji kodu.
+* Historia i audyt iteracji.
+* Łatwe testowanie i deployment dzięki modularnej strukturze i artefaktom.
+
+
