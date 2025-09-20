@@ -12,6 +12,68 @@ podczas wieloletniej pracy rozwijania oprogramowania z LLM-ami doszedłem do kil
 
 
 
+
+
+## Lista obaw programisty
+
+1. **Zbyt wiele folderów iteracji**
+
+   * Iteracje główne, sub-iteracje funkcjonalności, eksperymenty, poprawki.
+   * Trudność w odnalezieniu właściwej wersji.
+
+2. **Duplikacja kodu**
+
+   * Każda iteracja tworzy nowe foldery i nowe pliki.
+   * Powtarzanie funkcji, które działały wcześniej.
+
+3. **Nieefektywna refaktoryzacja**
+
+   * Kolejne iteracje wymagają zmian w wielu miejscach.
+   * Trudność w ocenie, czy rozpocząć nowy folder czy kontynuować stary.
+
+4. **Zarządzanie testami i wynikami**
+
+   * Każda iteracja ma własne testy, raporty i linty.
+   * Trudność w porównywaniu wyników między iteracjami.
+
+5. **Historia zmian**
+
+   * Trudno śledzić, które iteracje były stabilne, a które nie.
+   * Łączenie wiedzy między wersjami funkcjonalności.
+
+6. **Łączenie funkcjonalności**
+
+   * Jedna funkcjonalność może mieć wiele sub-iteracji.
+   * Trudność w integracji stabilnych fragmentów w kolejne wersje.
+
+7. **Zarządzanie manifestem**
+
+   * Utrzymanie aktualnego manifestu w wielu iteracjach.
+   * Powiązanie z poprzednimi iteracjami (`parent_iteration`).
+
+8. **Automatyzacja workflow**
+
+   * Pobieranie wyników testów/lintów i generowanie planów działań przez LLM.
+   * Minimalizacja błędów manualnych.
+
+9. **Archiwizacja starych iteracji**
+
+   * Jak zachować historię, a jednocześnie utrzymać porządek.
+   * Kompresja i ewentualne usuwanie niepotrzebnych folderów.
+
+10. **Kontekst LLM**
+
+    * LLM ma ograniczoną pamięć kontekstu.
+    * Jak uniknąć przeciążenia modelem przy wielu folderach i dużych projektach.
+
+
+
+
+
+
+
+
+
 ## Podsumowanie
 
 Wnioski z pracy z LLM w projektach programistycznych
