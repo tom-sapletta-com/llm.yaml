@@ -1,0 +1,5 @@
+pyyaml
+jsonschema
+pytest
+flake8
+mypy
