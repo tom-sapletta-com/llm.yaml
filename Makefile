@@ -1,73 +1,90 @@
-# Makefile for ymll project
+# Makefile dla projektu YMLL
 
 # ----------------------------------------------------------------------
-# Variables
+# Zmienne
 # ----------------------------------------------------------------------
 PYTHON ?= python3
 PIP    ?= pip
 REQ_FILE = requirements.txt
 
 # ----------------------------------------------------------------------
-# Help
+# Pomoc
 # ----------------------------------------------------------------------
 .PHONY: help
 help:
-	@echo "Available targets:"
-	@echo "  install   - install Python dependencies"
-	@echo "  test      - run test suite (pytest, flake8, mypy)"
-	@echo "  run       - execute full workflow (analysis, collect, plan, update)"
-	@echo "  lint      - run flake8 and mypy"
-	@echo "  clean     - remove generated files"
-	@echo "  publish   - create a timestamped archive of the project"
+	@echo "Dostępne polecenia:"
+	@echo "  install   - instaluje zależności Pythona"
+	@echo "  test      - uruchamia testy i analizę kodu"
+	@echo "  run       - wykonuje pełny workflow (analiza → zbiorczy raport → plan → nowa iteracja)"
+	@echo "  lint      - sprawdza jakość kodu (flake8 + mypy)"
+	@echo "  clean     - usuwa wygenerowane pliki"
+	@echo "  publish   - tworzy archiwum projektu z datą"
 
 # ----------------------------------------------------------------------
-# Install dependencies
+# Instalacja zależności
 # ----------------------------------------------------------------------
 .PHONY: install
 install:
+	@echo " Instalowanie zależności..."
 	@$(PIP) install -r $(REQ_FILE)
 
 # ----------------------------------------------------------------------
-# Run tests (wrapper script)
+# Uruchomienie testów
 # ----------------------------------------------------------------------
 .PHONY: test
 test:
+	@chmod +x run_tests.sh
 	@./run_tests.sh
 
 # ----------------------------------------------------------------------
-# Lint (flake8 + mypy)
+# Sprawdzenie jakości kodu
 # ----------------------------------------------------------------------
 .PHONY: lint
 lint:
-	@flake8 src/ || true
-	@mypy src/ || true
+	@echo " Sprawdzanie jakości kodu..."
+	@if [ -d "src" ]; then \
+		flake8 src/ --show-source --statistics || true; \
+		echo -e "\n Sprawdzanie typów mypy..."; \
+		mypy src/ --pretty || true; \
+	else \
+		echo " Brak katalogu src/. Pomijam sprawdzanie jakości kodu."; \
+	fi
 
 # ----------------------------------------------------------------------
-# Full workflow: analysis -> collect -> generate plan -> update iterations
+# Pełny workflow
 # ----------------------------------------------------------------------
 .PHONY: run
 run:
+	@echo " Uruchamianie pełnego workflow..."
 	@$(PYTHON) ymll/run_analysis.py
 	@$(PYTHON) ymll/collect_reports.py
 	@$(PYTHON) ymll/generate_plan.py
 	@$(PYTHON) ymll/update_iterations.py
+	@echo -e "\n Workflow zakończony. Sprawdź nową iterację w katalogu iteration_*"
 
 # ----------------------------------------------------------------------
-# Clean generated artifacts
+# Czyszczenie
 # ----------------------------------------------------------------------
 .PHONY: clean
 clean:
+	@echo " Czyszczenie..."
 	@rm -f prompt_for_chatai.txt plan.yaml
 	@rm -rf reports
 	@rm -f iterations_map.yaml
+	@echo " Wygenerowane pliki zostały usunięte"
 
 # ----------------------------------------------------------------------
-# Publish placeholder – creates a tar.gz archive with a timestamp
+# Publikacja (tworzy archiwum .tar.gz)
 # ----------------------------------------------------------------------
 .PHONY: publish
 publish:
+	@echo " Przygotowywanie archiwum..."
 	@TIMESTAMP=$$(date +%Y%m%d%H%M%S) && \
 	ARCHIVE="ymll-$${TIMESTAMP}.tar.gz" && \
-	echo "Creating archive $$ARCHIVE ..." && \
 	tar --exclude='./.git' --exclude='./.venv' -czf $$ARCHIVE . && \
-	echo "Archive created: $$ARCHIVE"
+	echo -e "\n Utworzono archiwum: $$ARCHIVE"
+
+# ----------------------------------------------------------------------
+# Domyślne polecenie (wyświetla pomoc)
+# ----------------------------------------------------------------------
+.DEFAULT_GOAL := help

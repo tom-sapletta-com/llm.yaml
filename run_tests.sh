@@ -1,23 +1,28 @@
 #!/bin/bash
 set -e
 
-echo "Running pytest..."
-if [ -d "tests" ]; then
-    python -m pytest tests/ -v
+# Kolorowe komunikaty
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${YELLOW} Uruchamianie testów...${NC}"
+if [ -d "tests" ] && [ "$(ls -A tests)" ]; then
+    python -m pytest tests/ -v --color=yes
 else
-    echo "No tests/ directory found. Skipping pytest."
+    echo -e "${YELLOW} Brak testów do uruchomienia.${NC}
+   Aby dodać testy, utwórz pliki w katalogu tests/ z prefixem test_"
 fi
 
-echo -e "\nRunning flake8..."
-if [ -d "src" ]; then
-    flake8 src/ || true
+echo -e "\n${YELLOW} Sprawdzanie jakości kodu...${NC}"
+if [ -d "src" ] && [ "$(ls -A src)" ]; then
+    echo -e "${GREEN} Uruchamiam flake8...${NC}"
+    flake8 src/ --show-source --statistics || true
+    
+    echo -e "\n${GREEN} Sprawdzanie typów mypy...${NC}"
+    mypy src/ --pretty || true
 else
-    echo "No src/ directory found. Skipping flake8."
+    echo -e "${YELLOW} Brak kodu źródłowego do analizy.${NC}\n   Dodaj kod do katalogu src/ aby przeprowadzić analizę."
 fi
 
-echo -e "\nRunning mypy..."
-if [ -d "src" ]; then
-    mypy src/ || true
-else
-    echo "No src/ directory found. Skipping mypy."
-fi
+echo -e "\n Analiza zakończona. Sprawdź powyższe wyniki.${NC}"

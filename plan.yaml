@@ -17,11 +17,11 @@
 # rootdir: /home/tom/github/tom-sapletta-com/ymll
 # plugins: cov-6.1.1, asyncio-1.1.0, anyio-4.10.0
 # asyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-# collected 1 item
+# collected 2 items
 # 
-# tests/test_placeholder.py .                                              [100%]
+# tests/test_placeholder.py ..                                             [100%]
 # 
-# ============================== 1 passed in 0.02s ===============================
+# ============================== 2 passed in 0.03s ===============================
 # 
 # 
 # 

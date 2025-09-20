@@ -18,3 +18,8 @@
   stable: false
   parent_iteration: iteration_2_FeatureX_v1
   notes: "Poprawa b\u0142\u0119d\xF3w i refaktoryzacja funkcji"
+- iteration: 4
+  folder: iteration_4_FeatureX_1
+  stable: false
+  parent_iteration: iteration_2_FeatureX_v1
+  notes: "Poprawa b\u0142\u0119d\xF3w i refaktoryzacja funkcji"
