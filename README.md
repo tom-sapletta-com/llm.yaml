@@ -1342,3 +1342,218 @@ python ymll/update_iterations.py
 * Zachowujemy pełną historię projektu bez zaśmiecania głównej struktury.
 
 
+
+## LLM
+
+katalog projektu z gotowymi skryptami instalacyjnymi i uruchomieniowymi dla wszystkich narzędzi CLI, tak aby działały niezależnie od dystrybucji Linuxa. Zrobimy to z użyciem **uniwersalnych poleceń** (`curl`, `pip`, `npm`, `xdg-open`) i sprawdzaniem systemu, aby `xdg-open` działało też na macOS (`open`).
+
+Oto projektowa struktura katalogu:
+
+```
+ai_project/
+├─ aichat/
+│  ├─ setup.sh
+│  └─ run.sh
+├─ gemini/
+│  ├─ setup.sh
+│  └─ run.sh
+├─ ollama/
+│  ├─ setup.sh
+│  └─ run.sh
+├─ aider/
+│  ├─ setup.sh
+│  └─ run.sh
+├─ lms/
+│  ├─ setup.sh
+│  └─ run.sh
+└─ README.md
+```
+
+---
+
+## 1️⃣ aichat/setup.sh
+
+```bash
+#!/bin/bash
+# Instalacja AIChat w systemach Linux/macOS
+
+echo "Instalacja AIChat..."
+
+# Instalacja pip, jeśli nie istnieje
+if ! command -v pip &> /dev/null; then
+    echo "pip nie znaleziony, instalacja..."
+    if [ -f /etc/debian_version ]; then
+        sudo apt update && sudo apt install -y python3-pip
+    elif [ -f /etc/redhat-release ]; then
+        sudo yum install -y python3-pip
+    else
+        echo "Nieznana dystrybucja, zainstaluj pip ręcznie."
+        exit 1
+    fi
+fi
+
+pip install --user aichat
+
+echo "AIChat zainstalowany."
+```
+
+## aichat/run.sh
+
+```bash
+#!/bin/bash
+# Uruchomienie AIChat w katalogu projektu i otwarcie pliku w przeglądarce
+
+if [ "$(uname)" == "Darwin" ]; then
+    BROWSER_CMD="open"
+else
+    BROWSER_CMD="xdg-open"
+fi
+
+echo "Uruchamianie AIChat..."
+aichat
+
+# Przykład otwarcia pliku HTML
+$aichat -e "$BROWSER_CMD index.html"
+```
+
+---
+
+## 2️⃣ gemini/setup.sh
+
+```bash
+#!/bin/bash
+echo "Instalacja Gemini CLI..."
+
+if ! command -v brew &> /dev/null; then
+    echo "Homebrew nie zainstalowany. Instalacja..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+
+brew install gemini
+
+echo "Gemini CLI zainstalowany."
+```
+
+## gemini/run.sh
+
+```bash
+#!/bin/bash
+if [ "$(uname)" == "Darwin" ]; then
+    BROWSER_CMD="open"
+else
+    BROWSER_CMD="xdg-open"
+fi
+
+gemini
+gemini "!$BROWSER_CMD docs/index.html"
+```
+
+---
+
+## 3️⃣ ollama/setup.sh
+
+```bash
+#!/bin/bash
+echo "Instalacja Ollama..."
+
+curl https://ollama.com/install.sh | bash
+ollama --version
+echo "Ollama zainstalowana."
+```
+
+## ollama/run.sh
+
+```bash
+#!/bin/bash
+if [ "$(uname)" == "Darwin" ]; then
+    BROWSER_CMD="open"
+else
+    BROWSER_CMD="xdg-open"
+fi
+
+ollama run llama3:8b
+ollama run llama3:8b "!$BROWSER_CMD build/index.html"
+```
+
+---
+
+## 4️⃣ aider/setup.sh
+
+```bash
+#!/bin/bash
+echo "Instalacja aider..."
+
+if ! command -v npm &> /dev/null; then
+    echo "npm nie znaleziony, instalacja Node.js..."
+    if [ -f /etc/debian_version ]; then
+        sudo apt update && sudo apt install -y nodejs npm
+    elif [ -f /etc/redhat-release ]; then
+        sudo yum install -y nodejs npm
+    else
+        echo "Nieznana dystrybucja, zainstaluj Node.js ręcznie."
+        exit 1
+    fi
+fi
+
+npm install -g aider
+echo "aider zainstalowany."
+```
+
+## aider/run.sh
+
+```bash
+#!/bin/bash
+if [ "$(uname)" == "Darwin" ]; then
+    BROWSER_CMD="open"
+else
+    BROWSER_CMD="xdg-open"
+fi
+
+aider review
+aider shell "!$BROWSER_CMD index.html"
+```
+
+---
+
+## 5️⃣ lms/setup.sh
+
+```bash
+#!/bin/bash
+echo "Instalacja LM Studio CLI..."
+curl -fsSL https://lmstudio.ai/install.sh | bash
+lms --version
+echo "LM Studio CLI zainstalowany."
+```
+
+## lms/run.sh
+
+```bash
+#!/bin/bash
+if [ "$(uname)" == "Darwin" ]; then
+    BROWSER_CMD="open"
+else
+    BROWSER_CMD="xdg-open"
+fi
+
+lms exec "$BROWSER_CMD report.html"
+```
+
+---
+
+### 🔹 Uwagi końcowe
+
+* Wszystkie skrypty są **wielodystrosystemowe Linux/macOS** dzięki sprawdzeniu `uname` i `xdg-open`/`open`.
+* Po sklonowaniu projektu nadaj uprawnienia wykonywalne:
+
+```bash
+chmod +x */setup.sh */run.sh
+```
+
+* Instalacja i uruchomienie każdego narzędzia:
+
+```bash
+./aichat/setup.sh
+./aichat/run.sh
+```
+
+
