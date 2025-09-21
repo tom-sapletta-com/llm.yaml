@@ -4,11 +4,15 @@ manifest realizacji projektów przy użyciu LLM
 ## Szkic
 podczas wieloletniej pracy rozwijania oprogramowania z LLM-ami doszedłem do kilku wniosków, które optymalizują czas dostarczenia oczekiwanych rezultatów:
 - istota celu generowania kodu jest mniej istotna niż forma, środowisko i techstack, które decydują o tym, czy dana usługa zadziała
-- specyfikacja nie jest wystarczająca do tworzenia
+- specyfikacja nie jest wystarczająca do utworzenia poprawnie działającej usługi
 - konieczne jest określenie wektora rozwoju, często przy refaktoryzacji dochodzi do koneicznosci określenia większej ilości tetsów i twoprzy się gó©ka zadań
-- Gdy dochodzimy do tej górki zadań potrzebujemy zadecydować czy stworzyćnowy projekt od nowa z aktualna specyfikacja i okresleniem punktu wektoru oczekiwań
+- Gdy dochodzimy do tej górki zadań potrzebujemy zadecydować czy stworzyć nowy projekt od nowa z aktualna specyfikacja i okresleniem punktu wektoru oczekiwań
 - każda iteracja wymaga kolejnego folderu, dlatego ż łatwiej jest coś stworzyć od nowa mając w głowie aktualne doświadczenia i niepowodzenia
 - to niepowodzenia kształtują wektor określający zakres prac i kierunek rozwoju
+- dlatego zmiana celu nie jest tak istotna jak zmiana formy, projektu, czyli:
+  - zamiast naprawiać problem lepiej stworzyć folder z testami
+  - zamiast zagłebiać się dlaczego nie działa na sprzęcie użytkownika lepiej zadać wygenerowanie docker-a
+  - zamiast poszukiwać problemu, lepiej zadać refaktoryzacje zmniejszając przy okazji wielkośc plików i rozbijajac ewwentualne prooblemy na mniejsze
 - kolejne iteracje nie powoinny polegać na zmianie aktualnych plików, ale całej struktury, co jest nieintuicyjne dla człowieka, który z zasady chce naprawić to co nie działa, gdyż okontekśt jest ściśle określony, jednak dla LLM to zbyt duży wydatek energetyczny i muszą skupiać się na protszzych modelach, dlatego konieczny jest manifest ułatwiający radzenie sobie z konkretnymi problemami poporzez ich dzielnie na mniejsze i realziacje ich w nowych folderach
 - przykładowo zamiast naprawiać to co nie działa w aktualnej wersji mamy do wyboru:
   - stworzenie od nowa tego co już jest z poszerzonym promptem lub
