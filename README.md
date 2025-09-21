@@ -9,7 +9,9 @@ podczas wieloletniej pracy rozwijania oprogramowania z LLM-ami doszedłem do kil
 - każda iteracja wymaga kolejnego folderu, dlatego ż łatwiej jest coś stworzyć od nowa mając w głowie aktualne doświadczenia i niepowodzenia
 - to niepowodzenia kształtują wektor określający zakres prac i kierunek rozwoju
 - kolejne iteracje nie powoinny polegać na zmianie aktualnych plików, ale całej struktury, co jest nieintuicyjne dla człowieka, który z zasady chce naprawić to co nie działa, gdyż okontekśt jest ściśle określony, jednak dla LLM to zbyt duży wydatek energetyczny i muszą skupiać się na protszzych modelach, dlatego konieczny jest manifest ułatwiający radzenie sobie z konkretnymi problemami poporzez ich dzielnie na mniejsze i realziacje ich w nowych folderach
-
+- przykładowo zamiast naprawiać to co nie działa w aktualnej wersji mamy do wyboru:
+  - stworzenie od nowa tego co już jest z poszerzonym promptem lub
+  - stworzenie kolejnego komponentu, który będzie korzystał z tego, tkóry aktualnie nie działa i LLM z kontekstu użycia będzie się starał dopasować stary kod peirwszego komponentu aby zaczął poorawnie funkcjonować lub napisze/nadpoisze nowy komponent
 
 
 
