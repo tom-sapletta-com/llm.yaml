@@ -12,7 +12,7 @@ podczas wieloletniej pracy rozwijania oprogramowania z LLM-ami doszedłem do kil
 - dlatego zmiana celu nie jest tak istotna jak zmiana formy, projektu, czyli:
   - zamiast naprawiać problem lepiej stworzyć folder z testami
   - zamiast zagłebiać się dlaczego nie działa na sprzęcie użytkownika lepiej zadać wygenerowanie docker-a
-  - zamiast poszukiwać problemu, lepiej zadać refaktoryzacje zmniejszając przy okazji wielkośc plików i rozbijajac ewwentualne prooblemy na mniejsze
+  - zamiast poszukiwać problemu, lepiej zadać refaktoryzacje zmniejszając przy okazji wielkośc plików i rozbijajac ewentualne problemy na mniejsze
 - kolejne iteracje nie powoinny polegać na zmianie aktualnych plików, ale całej struktury, co jest nieintuicyjne dla człowieka, który z zasady chce naprawić to co nie działa, gdyż okontekśt jest ściśle określony, jednak dla LLM to zbyt duży wydatek energetyczny i muszą skupiać się na protszzych modelach, dlatego konieczny jest manifest ułatwiający radzenie sobie z konkretnymi problemami poporzez ich dzielnie na mniejsze i realziacje ich w nowych folderach
 - przykładowo zamiast naprawiać to co nie działa w aktualnej wersji mamy do wyboru:
   - stworzenie od nowa tego co już jest z poszerzonym promptem lub
