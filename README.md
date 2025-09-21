@@ -3,7 +3,7 @@ manifest realizacji projektów przy użyciu LLM
 
 ## Szkic
 podczas wieloletniej pracy rozwijania oprogramowania z LLM-ami doszedłem do kilku wniosków, które optymalizują czas dostarczenia oczekiwanych rezultatów:
-- istota celu generowania kodu jest mniej istotna niż forma, która decyduje o sukcesie
+- istota celu generowania kodu jest mniej istotna niż forma, środowisko i techstack, które decydują o tym, czy dana usługa zadziała
 - specyfikacja nie jest wystarczająca do tworzenia
 - konieczne jest określenie wektora rozwoju, często przy refaktoryzacji dochodzi do koneicznosci określenia większej ilości tetsów i twoprzy się gó©ka zadań
 - Gdy dochodzimy do tej górki zadań potrzebujemy zadecydować czy stworzyćnowy projekt od nowa z aktualna specyfikacja i okresleniem punktu wektoru oczekiwań
