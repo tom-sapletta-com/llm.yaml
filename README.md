@@ -19,8 +19,9 @@ podczas wieloletniej pracy rozwijania oprogramowania z LLM-ami doszedłem do kil
   - stworzenie od nowa tego co już jest z poszerzonym promptem lub
   - stworzenie kolejnego komponentu, który będzie korzystał z tego, który aktualnie nie działa i LLM z kontekstu użycia będzie się starał dopasować stary kod peirwszego komponentu aby zaczął poorawnie funkcjonować lub napisze/nadpoisze nowy komponent
 - LLM jest modelem i modeluje dane, działa w ramach kontekstu,
-- model analizuje tylko tyle znaków/słów z historii rozmowy, ile mieści się w ramce, więc aby ogarnąć cały koncept powinien stosować modele: schematy, manifesty, definicje, frameworki
+- model analizuje tylko tyle znaków/słów z historii rozmowy, ile mieści się w ramce, więc aby ogarnąć cały koncept powinien stosować modele: schematy, manifesty, definicje, frameworki, DSL
   - w praktyce oznacza to, że pisanie kodu we frameworku React/Vue/Svelte będzie lepiej kontrolowane i da lepsze rezultaty niż pisanie w natywnym JS vanillia
+  - to oznacza, że sam fakt rozumienia niskopoziomowego języka z powodu ograniczenia ramki kontekstu dyskwalifikuje natywne języki na rzecz frameworków opsiujacych modele i koncepcje w ramach krótszego zapisu
 
 
 
