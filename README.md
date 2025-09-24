@@ -1,8 +1,37 @@
 # llm.yaml
 manifest realizacji projektów przy użyciu LLM
 
-## Szkic
-podczas wieloletniej pracy rozwijania oprogramowania z LLM-ami doszedłem do kilku wniosków, które optymalizują czas dostarczenia oczekiwanych rezultatów:
+## Historia 
+
+podczas pracy rozwijania oprogramowania z LLM-ami doszedłem do kilku wniosków,
+np. używając wtyczki Windsurf z modelami  **Claude Sonnet 4 thinking** lub **GPT 5 high reasoning**
+byłem pewien że dając LLM-woi dużo potrzebnych danych wszystko pójdzie dobrze, niestety nie...
+dając na bieżąco dane z logowania zdarzeń a nawet testowanie czy to co pojawia się na wyjściu jest prawidłowe w czasie rzeczywistym
+nie otrzymuje tego co bym chciał. okazuje się, że model ma większą **skłonność do generowania** niż do **naprawiania** i to jak **1/10**
+
+Czyli dając zadanie: "zrób coś od zera" otrzymuje kilka-kilkanaście plików w 2-3 promptach i kod działa.
+a w przypadku naprawy kilku plików naprawa zajmuje kilkanaście albo więcej iteracji.
+
+Czy to kwestia okna kontekstu? *czyli ilość tokenów, które dany model jest w stanie przetworzyć.
+- nie sądzę, bo za każdym razem lepsze rezultaty daje kolejna iteracja w nowym folderze niż poprawa tego co jest, jeśli mówimy o dziesiątkach plików a nie kilku kilobajtach danych.
+
+
+## Generowanie od zera
+
+Modele LLM są trenowane głównie na danych w stylu: „Napisz funkcję, wygeneruj artykuł, stwórz coś”.
+To sprawia, że mają naturalne skłonności do kreacji – łatwiej im zbudować strukturę od podstaw, bo odpowiada to wzorcom, jakie widziały podczas treningu.
+
+## Naprawianie istniejącego kodu
+
+To trudniejsze, bo model musi:
+- Zrozumieć dokładnie kontekst (czasem wiele plików, zależności, istniejące konwencje).
+- Wprowadzić zmiany lokalnie, nie niszcząc reszty.
+- Pamiętać długofalowe zależności między plikami.
+W praktyce LLM zamiast „delikatnych operacji chirurgicznych” często przepisuje fragmenty, bo tak jest „łatwiej statystycznie” i bliżej danych treningowych.
+To wygląda jak „1/10” efektywności w porównaniu do czystego generowania.
+
+## Założenia
+ które optymalizują czas dostarczenia oczekiwanych rezultatów:
 - istota celu generowania kodu jest mniej istotna niż forma, środowisko i techstack, które decydują o tym, czy dana usługa zadziała
 - specyfikacja nie jest wystarczająca do utworzenia poprawnie działającej usługi
 - konieczne jest określenie wektora rozwoju, często przy refaktoryzacji dochodzi do koneicznosci określenia większej ilości tetsów i twoprzy się gó©ka zadań
