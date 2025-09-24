@@ -203,6 +203,43 @@ generate_smart_prompt() {
     # Wczytaj konfigurację warstw
     local CONFIG=$(cat "$CONFIG_FILE")
 
+    # Wykryj czy żądano FastAPI/Python dla warstwy API
+    local USE_FASTAPI="false"
+    if echo "$DESCRIPTION" | grep -qiE 'fastapi|python api|python'; then
+        USE_FASTAPI="true"
+    fi
+
+    # Zdefiniuj specyfikację plików dla API oraz blok przykładowy
+    local API_REQ_LINE
+    local API_EXAMPLE_BLOCK
+    if [ "$USE_FASTAPI" = "true" ]; then
+        API_REQ_LINE="  - api: main.py (główny plik), requirements.txt"
+        API_EXAMPLE_BLOCK=$(cat << 'JSON'
+    {
+      "name": "api",
+      "layer": "api",
+      "files": {
+        "main.py": "from fastapi import FastAPI\napp = FastAPI()\n\nitems = [{\"id\":1,\"name\":\"Product 1\",\"price\":10.99},{\"id\":2,\"name\":\"Product 2\",\"price\":15.99}]\n\n@app.get('/api/v1/products')\ndef get_all_products():\n    return items",
+        "requirements.txt": "fastapi==0.110.0\nuvicorn==0.29.0"
+      }
+    },
+JSON
+)
+    else
+        API_REQ_LINE="  - api: server.js (główny plik), package.json"
+        API_EXAMPLE_BLOCK=$(cat << 'JSON'
+    {
+      "name": "api",
+      "layer": "api",
+      "files": {
+        "server.js": "// PEŁNY KOD API\nconst express = require('express');\nconst app = express();\napp.get('/api/v1', (req, res) => res.json({version:'1.0'}));\napp.listen(3200, () => console.log('API on 3200'));",
+        "package.json": "{\"name\":\"api\",\"version\":\"1.0.0\",\"dependencies\":{\"express\":\"^4.18.0\"}}"
+      }
+    },
+JSON
+)
+    fi
+
     cat << EOF
 Stwórz kompletną implementację dla projektu $PROJECT_NAME.
 
@@ -212,7 +249,7 @@ KRYTYCZNE WYMAGANIA STRUKTURALNE:
 1. Każda warstwa MUSI mieć dokładnie te pliki:
    - frontend: server.js (główny plik), package.json
    - backend: index.js (główny plik), package.json
-   - api: server.js (główny plik), package.json
+   $API_REQ_LINE
    - workers: worker.py (główny plik), requirements.txt
    - deployment: deploy.sh (główny plik)
 
@@ -236,14 +273,7 @@ KRYTYCZNE WYMAGANIA STRUKTURALNE:
         "package.json": "{\"name\":\"backend\",\"version\":\"1.0.0\",\"dependencies\":{\"express\":\"^4.18.0\"}}"
       }
     },
-    {
-      "name": "api",
-      "layer": "api",
-      "files": {
-        "server.js": "// PEŁNY KOD API\nconst express = require('express');\nconst app = express();\napp.get('/api/v1', (req, res) => res.json({version:'1.0'}));\napp.listen(3200, () => console.log('API on 3200'));",
-        "package.json": "{\"name\":\"api\",\"version\":\"1.0.0\",\"dependencies\":{\"express\":\"^4.18.0\"}}"
-      }
-    },
+${API_EXAMPLE_BLOCK}
     {
       "name": "workers",
       "layer": "workers",
@@ -573,13 +603,26 @@ CMD ["node", "{entrypoint}"]"""
             # Check if this is a Python API (FastAPI) or Node.js API
             layer_files = os.listdir(layer_path)
             if any(f.endswith('.py') for f in layer_files):
-                dockerfile_content = """FROM python:3.9-slim
+                # Detect python module name containing FastAPI app
+                module = "server"
+                if "main.py" in layer_files:
+                    module = "main"
+                elif "server.py" in layer_files:
+                    module = "server"
+                else:
+                    # pick first .py file without extension
+                    for f in layer_files:
+                        if f.endswith('.py'):
+                            module = os.path.splitext(f)[0]
+                            break
+
+                dockerfile_content = f"""FROM python:3.9-slim
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 EXPOSE 3200
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "3200"]"""
+CMD ["uvicorn", "{module}:app", "--host", "0.0.0.0", "--port", "3200"]"""
             else:
                 entrypoint = "server.js"
                 port = 3200
@@ -620,11 +663,70 @@ for component in data.get("components", []):
     if not layer or not files:
         continue
 
+    # Normalizacja aliasów warstw (np. FastAPI)
+    if layer in ["api_fastapi", "fastapi", "py_api", "python_api"]:
+        layer = "api"
+
     layer_path = os.path.join(iter_path, layer)
+    # Upewnij się, że katalog warstwy istnieje zanim zapiszemy pliki
+    os.makedirs(layer_path, exist_ok=True)
 
     # Zapisz wszystkie pliki z komponentu
     for filename, content in files.items():
         filepath = os.path.join(layer_path, filename)
+        # Upewnij się, że podkatalogi również istnieją
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+        # Normalizacja requirements.txt (zamiana przecinków/średników na nowe linie)
+        if filename.lower() == "requirements.txt":
+            try:
+                text = str(content).replace(",", "\n").replace(";", "\n")
+                # Usuń puste linie i spacje
+                lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+                content = "\n".join(lines) + "\n"
+            except Exception:
+                pass
+
+        # Sanityzacja package.json: usuń błędne zależności, zapewnij express, ustaw main
+        if filename.lower() == "package.json":
+            try:
+                obj = None
+                if isinstance(content, str):
+                    obj = json.loads(content)
+                elif isinstance(content, dict):
+                    obj = content
+                if isinstance(obj, dict):
+                    deps = obj.get("dependencies", {}) or {}
+                    # Usuń błędne lub problematyczne zależności
+                    if "fetch" in deps:
+                        deps.pop("fetch", None)
+                    # Usuń wszystkie pakiety @loopback/*
+                    for k in list(deps.keys()):
+                        if k.startswith("@loopback/"):
+                            deps.pop(k, None)
+                    # Zapewnij express
+                    if "express" not in deps:
+                        deps["express"] = "^4.18.0"
+                    obj["dependencies"] = deps
+                    # Ustaw main na podstawie warstwy
+                    if layer == "frontend":
+                        obj["main"] = obj.get("main", "server.js")
+                    elif layer == "backend":
+                        obj["main"] = obj.get("main", "index.js")
+                    elif layer == "api":
+                        # tylko dla wariantu Node
+                        obj["main"] = obj.get("main", "server.js")
+                    content = json.dumps(obj, indent=2)
+            except Exception:
+                pass
+
+        # Jeśli content nie jest stringiem (np. dict/list), zserializuj do JSON
+        if not isinstance(content, str):
+            try:
+                content = json.dumps(content, indent=2)
+            except Exception:
+                content = str(content)
+
         with open(filepath, "w") as f:
             f.write(content)
         print(f"✅ Utworzono: {filepath}")
@@ -659,18 +761,28 @@ run_self_healing() {
         ITER_COUNT=$((ITER_COUNT+1))
         echo "================ Próba $ITER_COUNT/$MAX_ITERATIONS ================"
 
+        # Przygotuj zmienne błędów wcześniej
+        local ERROR_LOGS=""
+        local HAS_ERRORS=false
+
+        # Sanityzacja iteracji przed budowaniem
+        sanitize_iteration "$ITERATIONS_DIR/$LATEST_ITER"
+
         # Uruchom Docker Compose
         echo "🐳 Budowanie i uruchamianie kontenerów..."
         docker-compose down 2>/dev/null || true
-        docker-compose up --build -d
+        local COMPOSE_OUTPUT
+        COMPOSE_OUTPUT=$(docker-compose up --build -d 2>&1)
+        local COMPOSE_STATUS=$?
+        if [ $COMPOSE_STATUS -ne 0 ]; then
+            echo "⚠️  Błąd podczas docker-compose up (kod $COMPOSE_STATUS)"
+            HAS_ERRORS=true
+            ERROR_LOGS="${ERROR_LOGS}\n=== docker-compose ===\n$(echo "$COMPOSE_OUTPUT" | tail -n 100)"
+        fi
 
-        # Poczekaj na start
+        # Poczekaj na start (tylko jeśli compose w ogóle ruszył)
         echo "⏳ Czekam na uruchomienie serwisów..."
         sleep 10
-
-        # Sprawdź status i zbierz logi
-        local ERROR_LOGS=""
-        local HAS_ERRORS=false
 
         echo "🔍 Analiza stanu serwisów..."
         for container in $(docker-compose ps -q); do
@@ -735,9 +847,15 @@ run_e2e_tests() {
         ALL_PASSED=false
     fi
 
-    # Test API
+    # Test API (obsługuj zarówno Node jak i FastAPI)
     if curl -s "http://localhost:3200/api/v1/info" > /dev/null 2>&1; then
-        echo "  ✅ API: Dostępny"
+        echo "  ✅ API: Dostępny (/api/v1/info)"
+    elif curl -s "http://localhost:3200/api/v1/products" > /dev/null 2>&1; then
+        echo "  ✅ API: Dostępny (/api/v1/products)"
+    elif curl -s "http://localhost:3200/api/v1" > /dev/null 2>&1; then
+        echo "  ✅ API: Dostępny (/api/v1)"
+    elif curl -s "http://localhost:3200/api/health" > /dev/null 2>&1; then
+        echo "  ✅ API: Dostępny (/api/health)"
     else
         echo "  ❌ API: Niedostępny"
         ALL_PASSED=false
@@ -806,7 +924,20 @@ validate_iteration() {
     # Sprawdź wymagane pliki
     [ -f "$ITER_PATH/frontend/server.js" ] || { echo "  ❌ Brak frontend/server.js"; VALID=false; }
     [ -f "$ITER_PATH/backend/index.js" ] || { echo "  ❌ Brak backend/index.js"; VALID=false; }
-    [ -f "$ITER_PATH/api/server.js" ] || { echo "  ❌ Brak api/server.js"; VALID=false; }
+
+    # API może być w Node (server.js) albo w Python (*.py + requirements.txt)
+    local API_PY_EXISTS=false
+    if [ -f "$ITER_PATH/api/server.js" ]; then
+        : # OK, Node API
+    else
+        if ls "$ITER_PATH/api"/*.py >/dev/null 2>&1 && [ -f "$ITER_PATH/api/requirements.txt" ]; then
+            API_PY_EXISTS=true
+        else
+            echo "  ❌ Brak api/server.js i brak API Python (*.py + requirements.txt)"
+            VALID=false
+        fi
+    fi
+
     [ -f "$ITER_PATH/workers/worker.py" ] || { echo "  ❌ Brak workers/worker.py"; VALID=false; }
 
     if [ "$VALID" = "true" ]; then
@@ -839,8 +970,27 @@ app.listen(3100, () => console.log('Backend on port 3100'));
 EOF
     fi
 
-    # Dodaj package.json jeśli brakuje
+    # Jeśli API w Pythonie istnieje, nie generuj Node API ani package.json dla api
+    local API_PY_EXISTS=false
+    if ls "$ITER_PATH/api"/*.py >/dev/null 2>&1 && [ -f "$ITER_PATH/api/requirements.txt" ]; then
+        API_PY_EXISTS=true
+    fi
+
+    # Generuj brakujący server.js dla API tylko jeśli nie ma API w Pythonie
+    if [ "$API_PY_EXISTS" != true ] && [ ! -f "$ITER_PATH/api/server.js" ]; then
+        cat > "$ITER_PATH/api/server.js" << 'EOF'
+const express = require('express');
+const app = express();
+app.get('/api/v1/info', (req, res) => res.json({version: '1.0', status: 'API Gateway running'}));
+app.listen(3200, () => console.log('API Gateway on port 3200'));
+EOF
+    fi
+
+    # Dodaj package.json jeśli brakuje (pomiń api gdy Python)
     for layer in frontend backend api; do
+        if [ "$layer" = "api" ] && [ "$API_PY_EXISTS" = true ]; then
+            continue
+        fi
         if [ ! -f "$ITER_PATH/$layer/package.json" ]; then
             cat > "$ITER_PATH/$layer/package.json" << EOF
 {
@@ -853,6 +1003,45 @@ EOF
 EOF
         fi
     done
+}
+
+sanitize_iteration() {
+    local ITER_PATH="$1"
+    # Sanityzuj package.json w warstwach Node (frontend, backend, api)
+    python3 - "$ITER_PATH" << 'PY'
+import json, os, sys
+iter_path = sys.argv[1]
+layers = ["frontend", "backend", "api"]
+for layer in layers:
+    pkg_path = os.path.join(iter_path, layer, "package.json")
+    if not os.path.isfile(pkg_path):
+        continue
+    try:
+        with open(pkg_path, "r") as f:
+            data = json.load(f)
+        deps = data.get("dependencies", {}) or {}
+        # Usuń fetch i pakiety @loopback/*
+        deps.pop("fetch", None)
+        for k in list(deps.keys()):
+            if k.startswith("@loopback/"):
+                deps.pop(k, None)
+        # Zapewnij express
+        if "express" not in deps:
+            deps["express"] = "^4.18.0"
+        data["dependencies"] = deps
+        # Ustaw main
+        if layer == "frontend":
+            data["main"] = data.get("main", "server.js")
+        elif layer == "backend":
+            data["main"] = data.get("main", "index.js")
+        else:
+            data["main"] = data.get("main", "server.js")
+        with open(pkg_path, "w") as f:
+            json.dump(data, f, indent=2)
+        print(f"✅ Zsanityzowano {pkg_path}")
+    except Exception as e:
+        print(f"⚠️  Nie udało się zsanityzować {pkg_path}: {e}")
+PY
 }
 
 update_registry_and_compose() {
