@@ -53,7 +53,7 @@ To wygląda jak „1/10” efektywności w porównaniu do czystego generowania.
   - to oznacza, że sam fakt rozumienia niskopoziomowego języka z powodu ograniczenia ramki kontekstu dyskwalifikuje natywne języki na rzecz frameworków opsiujacych modele i koncepcje w ramach krótszego zapisu
 
 
-
+![img.png](img.png)
 
 ## Podsumowanie
 

@@ -1,16 +1,18 @@
 #!/bin/bash
 # run.sh
-# Self-healing workflow z granularnymi poprawkami w plikach
+# Self-healing workflow z automatyczną analizą logów Docker
 
-DESCRIPTION="$1"
+echo "🚀 Uruchamianie self-healing workflow opartego na analizie logów Docker..."
 
-# Sprawdź czy podano opis zadania
-if [ -z "$DESCRIPTION" ]; then
-    echo "❌ Błąd: Nie podano opisu zadania"
-    echo "Użycie: $0 \"opis funkcjonalności\""
-    echo "Przykład: $0 \"Dodaj widok profilu użytkownika z walidacją API\""
+# Automatyczne wykrycie najnowszej iteracji
+LATEST_ITERATION=$(ls -1 iterations/ | sort -V | tail -n 1)
+if [ -z "$LATEST_ITERATION" ]; then
+    echo "❌ Błąd: Brak iteracji w folderze iterations/"
+    echo "💡 Najpierw uruchom gen.sh aby wygenerować iterację"
     exit 1
 fi
+
+echo "🔍 Wykryto najnowszą iterację: $LATEST_ITERATION"
 ITERATIONS_DIR="./iterations"
 REGISTRY_FILE="./registry.yaml"
 TEST_FILE="./test.yaml"
@@ -18,15 +20,18 @@ DOCKER_COMPOSE="./docker-compose.yml"
 MAX_ITERATIONS=5
 ITER_COUNT=0
 
-echo "Start granular self-healing workflow dla zadania: $DESCRIPTION"
+echo "🔄 Start self-healing workflow opartego na analizie logów..."
+
+# Ustawienie najnowszej iteracji jako bazowej
+LAST_ITER_PATH="$ITERATIONS_DIR/$LATEST_ITERATION"
 
 while [ $ITER_COUNT -lt $MAX_ITERATIONS ]; do
     ITER_COUNT=$((ITER_COUNT+1))
     echo "================ Iteracja $ITER_COUNT ================"
 
-    # --- 1. Generacja nowej iteracji lub patch ---
+    # --- 1. Uruchomienie projektu lub generacja patch ---
     if [ $ITER_COUNT -eq 1 ]; then
-        ./gen.sh "$DESCRIPTION"
+        echo "🐳 Uruchamianie istniejącej iteracji: $LATEST_ITERATION"
     else
         # Analiza logów i generowanie promptu z granularnymi poprawkami
         PATCH_PROMPT=$(cat <<EOM
@@ -34,7 +39,7 @@ Popraw błędy w poprzedniej iteracji projektu GenerycznyApp.
 Opis błędów:
 $ERROR_LOGS
 Pliki wymagające poprawy:
-$(ls -1 "$LAST_ITER_PATH" | tr '\n' ' ')
+$(ls -1 "$LAST_ITER_PATH" 2>/dev/null | tr '\n' ' ' || echo "Brak plików do analizy")
 Zaktualizuj tylko te pliki, które wymagają poprawek.
 Uwzględnij strukturę warstw: frontend, backend, workers, api, deployment.
 Zaktualizuj registry.yaml i test.yaml.
@@ -42,7 +47,7 @@ Wygeneruj poprawione pliki w nowym folderze iteracji.
 EOM
 )
 
-        PATCH_DESC=$(echo "$DESCRIPTION" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]' | cut -c1-15)
+        PATCH_DESC="logfix"
         ITER_NAME=$(printf "%02d_%s_patch" $ITER_COUNT $PATCH_DESC)
         ITER_PATH="$ITERATIONS_DIR/$ITER_NAME"
         mkdir -p "$ITER_PATH/frontend" "$ITER_PATH/backend" "$ITER_PATH/workers" "$ITER_PATH/api" "$ITER_PATH/deployment"
@@ -166,13 +171,21 @@ PYTHON
     # --- 3. Pobranie logów i sprawdzenie błędów ---
     ERROR_LOGS=""
     ERROR_FOUND=0
-    for svc in $(docker-compose ps --services); do
-        LOG=$(docker logs "$svc" 2>&1 | tail -n 50)
-        echo "Logi $svc (ostatnie 50 linii):"
-        echo "$LOG"
-        if echo "$LOG" | grep -i -E "error|exception|fail"; then
-            ERROR_FOUND=1
-            ERROR_LOGS="$ERROR_LOGS\n[$svc]\n$LOG"
+    
+    # Pobierz rzeczywiste nazwy kontenerów Docker Compose
+    for container in $(docker-compose ps -q); do
+        if [ -n "$container" ]; then
+            # Pobierz nazwę serwisu z kontenera
+            svc=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$container" 2>/dev/null || echo "unknown")
+            LOG=$(docker logs "$container" 2>&1 | tail -n 50)
+            echo "Logi $svc (ostatnie 50 linii):"
+            echo "$LOG"
+            
+            # Sprawdzenie rzeczywistych błędów (z wyjątkiem ostrzeżeń Docker)
+            if echo "$LOG" | grep -i -E "error|exception|fail" | grep -v -i -E "warn|warning|buildx"; then
+                ERROR_FOUND=1
+                ERROR_LOGS="$ERROR_LOGS\n[$svc]\n$LOG"
+            fi
         fi
     done
 
@@ -273,7 +286,7 @@ PYTHON
         break
     else
         echo "Błędy wykryte. Generujemy patch w kolejnej iteracji..."
-        DESCRIPTION="Popraw błędy z poprzedniej iteracji: $DESCRIPTION"
+        echo "📋 Analizując logi z poprzedniej iteracji dla automatycznych poprawek..."
         docker-compose down
     fi
 done

@@ -11,11 +11,11 @@ DOCKER_COMPOSE="./docker-compose.yml"
 mkdir -p "$ITERATIONS_DIR"
 
 # --- 1. Wyznacz nowy numer iteracji ---
-LAST_ITER=$(ls -1 $ITERATIONS_DIR | grep iter_ | sort | tail -n1)
+LAST_ITER=$(ls -1 $ITERATIONS_DIR | grep -E '^[0-9]{2}_' | sort | tail -n1)
 if [ -z "$LAST_ITER" ]; then
     NUM=1
 else
-    NUM=$(echo $LAST_ITER | sed -E 's/iter_0*([0-9]+)_.*/\1/' )
+    NUM=$(echo $LAST_ITER | sed -E 's/^0*([0-9]+)_.*/\1/' )
     NUM=$((NUM+1))
 fi
 
@@ -28,7 +28,7 @@ mkdir -p "$ITER_PATH/frontend" "$ITER_PATH/backend" "$ITER_PATH/workers" "$ITER_
 echo "Generowana nowa iteracja: $ITER_NAME"
 
 # --- 2. Wczytaj ostatnie dwie iteracje do promptu ---
-PREV_ITERS=$(ls -1 $ITERATIONS_DIR | grep iter_ | sort | tail -n2)
+PREV_ITERS=$(ls -1 $ITERATIONS_DIR | grep -E '^[0-9]{2}_' | sort | tail -n2)
 PREV_CONTENT=""
 for it in $PREV_ITERS; do
     PREV_CONTENT="$PREV_CONTENT\n$(ls -1 $ITERATIONS_DIR/$it)"
