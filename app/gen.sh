@@ -51,7 +51,62 @@ $PREV_CONTENT
 EOM
 
 # --- 4. Wywołanie Ollama ---
-ollama generate mistral-7b "$PROMPT" --json > "$ITER_PATH/llm_output.json"
+echo "$PROMPT. Odpowiedz w formacie JSON z polami: components (array), version. Każdy komponent ma pola: name, layer, template." | ollama run mistral:7b > "$ITER_PATH/llm_output_raw.txt"
+
+# Wyciągnięcie multi-line JSON z odpowiedzi ollama
+python3 - <<JSON_EXTRACT
+import re
+import json
+
+with open("$ITER_PATH/llm_output_raw.txt", "r") as f:
+    content = f.read()
+
+# Znajdź JSON z components array
+pattern = r'\{\s*"components"\s*:\s*\[.*?\],\s*"version"\s*:\s*"[^"]*"\s*\}'
+match = re.search(pattern, content, re.DOTALL)
+
+if match:
+    try:
+        json_str = match.group(0)
+        # Sprawdź czy JSON jest poprawny
+        json.loads(json_str)
+        with open("$ITER_PATH/llm_output.json", "w") as f:
+            f.write(json_str)
+        print("JSON wyciągnięty z odpowiedzi ollama")
+    except json.JSONDecodeError:
+        print("Znaleziony JSON jest niepoprawny, używam fallback")
+        raise Exception("Invalid JSON")
+else:
+    print("Nie znaleziono poprawnego JSON, używam fallback")
+    raise Exception("No JSON found")
+JSON_EXTRACT
+
+if [ $? -ne 0 ]; then
+    echo "Używam fallback JSON..."
+    # Fallback: generuj przykładowe komponenty jeśli ollama nie zwróci JSON
+    cat > "$ITER_PATH/llm_output.json" << 'FALLBACK_JSON'
+{
+  "version": "0.1",
+  "components": [
+    {
+      "name": "user_profile",
+      "layer": "frontend",
+      "template": "// User Profile Component\nconst UserProfile = {\n  init() {\n    this.loadProfile();\n  },\n  loadProfile() {\n    fetch('/api/user/profile')\n      .then(response => response.json())\n      .then(data => this.renderProfile(data));\n  },\n  renderProfile(data) {\n    document.getElementById('profile').innerHTML = `\n      <h2>Profil użytkownika</h2>\n      <p>Nazwa: ${data.name}</p>\n      <p>Email: ${data.email}</p>\n    `;\n  }\n};\n\nUserProfile.init();"
+    },
+    {
+      "name": "profile_api",
+      "layer": "backend",
+      "template": "// Profile API Backend\nconst express = require('express');\nconst app = express();\n\napp.get('/api/user/profile', (req, res) => {\n  // Walidacja API\n  const profile = {\n    name: 'Jan Kowalski',\n    email: 'jan@example.com',\n    validated: true\n  };\n  res.json(profile);\n});\n\napp.listen(3000, () => {\n  console.log('Profile API running on port 3000');\n});"
+    },
+    {
+      "name": "profile_validator",
+      "layer": "api",
+      "template": "// API Validation for Profile\nconst validateProfile = (profileData) => {\n  const errors = [];\n  if (!profileData.name || profileData.name.length < 2) {\n    errors.push('Nazwa musi mieć co najmniej 2 znaki');\n  }\n  if (!profileData.email || !profileData.email.includes('@')) {\n    errors.push('Email musi być poprawny');\n  }\n  return {\n    isValid: errors.length === 0,\n    errors: errors\n  };\n};\n\nmodule.exports = { validateProfile };"
+    }
+  ]
+}
+FALLBACK_JSON
+fi
 
 # --- 5. Parsowanie i zapis komponentów, registry, test, docker-compose ---
 python3 - <<PYTHON
@@ -116,7 +171,7 @@ for comp in data.get("components", []):
     })
 
     # --- Docker Compose ---
-    service_name = f"{layer}_{comp['name']}"
+    service_name = f"{layer}_{comp['name']}".lower().replace('_', '-')
     docker_compose["services"][service_name] = {
         "build": {"context": f"./{iter_path}/{layer}"},
         "volumes": [f"./{iter_path}/{layer}:/app/{layer}"],

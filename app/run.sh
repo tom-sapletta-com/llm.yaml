@@ -3,6 +3,14 @@
 # Self-healing workflow z granularnymi poprawkami w plikach
 
 DESCRIPTION="$1"
+
+# Sprawdź czy podano opis zadania
+if [ -z "$DESCRIPTION" ]; then
+    echo "❌ Błąd: Nie podano opisu zadania"
+    echo "Użycie: $0 \"opis funkcjonalności\""
+    echo "Przykład: $0 \"Dodaj widok profilu użytkownika z walidacją API\""
+    exit 1
+fi
 ITERATIONS_DIR="./iterations"
 REGISTRY_FILE="./registry.yaml"
 TEST_FILE="./test.yaml"
@@ -18,7 +26,7 @@ while [ $ITER_COUNT -lt $MAX_ITERATIONS ]; do
 
     # --- 1. Generacja nowej iteracji lub patch ---
     if [ $ITER_COUNT -eq 1 ]; then
-        ./generate_iteration_full_compose.sh "$DESCRIPTION"
+        ./gen.sh "$DESCRIPTION"
     else
         # Analiza logów i generowanie promptu z granularnymi poprawkami
         PATCH_PROMPT=$(cat <<EOM
@@ -39,7 +47,53 @@ EOM
         mkdir -p "$ITER_PATH/frontend" "$ITER_PATH/backend" "$ITER_PATH/workers" "$ITER_PATH/api" "$ITER_PATH/deployment"
 
         echo "Generowanie patcha iteracji: $ITER_NAME"
-        ollama generate mistral-7b "$PATCH_PROMPT" --json > "$ITER_PATH/llm_output.json"
+        echo "$PATCH_PROMPT. Odpowiedz w formacie JSON z polami: components (array), version. Każdy komponent ma pola: name, layer, template, patch (boolean)." | ollama run mistral:7b > "$ITER_PATH/llm_output_raw.txt"
+
+        # Wyciągnięcie multi-line JSON z odpowiedzi ollama
+        python3 - <<JSON_EXTRACT
+import re
+import json
+
+with open("$ITER_PATH/llm_output_raw.txt", "r") as f:
+    content = f.read()
+
+# Znajdź JSON z components array
+pattern = r'\{\s*"components"\s*:\s*\[.*?\],\s*"version"\s*:\s*"[^"]*"\s*\}'
+match = re.search(pattern, content, re.DOTALL)
+
+if match:
+    try:
+        json_str = match.group(0)
+        # Sprawdź czy JSON jest poprawny
+        json.loads(json_str)
+        with open("$ITER_PATH/llm_output.json", "w") as f:
+            f.write(json_str)
+        print("JSON wyciągnięty z odpowiedzi ollama")
+    except json.JSONDecodeError:
+        print("Znaleziony JSON jest niepoprawny, używam fallback")
+        raise Exception("Invalid JSON")
+else:
+    print("Nie znaleziono poprawnego JSON, użyjem fallback")
+    raise Exception("No JSON found")
+JSON_EXTRACT
+
+        if [ $? -ne 0 ]; then
+            echo "Używam fallback JSON..."
+            # Fallback: generuj przykładowe poprawki jeśli ollama nie zwróci JSON
+            cat > "$ITER_PATH/llm_output.json" << 'FALLBACK_JSON'
+{
+  "version": "0.1",
+  "components": [
+    {
+      "name": "user_profile",
+      "layer": "frontend", 
+      "patch": true,
+      "template": "// Fixed User Profile Component\nconst UserProfile = {\n  init() {\n    this.loadProfile();\n  },\n  loadProfile() {\n    fetch('/api/user/profile')\n      .then(response => {\n        if (!response.ok) throw new Error('Network error');\n        return response.json();\n      })\n      .then(data => this.renderProfile(data))\n      .catch(err => console.error('Error:', err));\n  },\n  renderProfile(data) {\n    const profileEl = document.getElementById('profile');\n    if (profileEl) {\n      profileEl.innerHTML = `\n        <h2>Profil użytkownika</h2>\n        <p>Nazwa: ${data.name || 'N/A'}</p>\n        <p>Email: ${data.email || 'N/A'}</p>\n      `;\n    }\n  }\n};\n\nUserProfile.init();"
+    }
+  ]
+}
+FALLBACK_JSON
+        fi
 
         # Parsowanie komponentów i zapis tylko plików wymagających poprawy
         python3 - <<PYTHON
