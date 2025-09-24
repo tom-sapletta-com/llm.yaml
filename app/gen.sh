@@ -19,9 +19,9 @@ else
     NUM=$((NUM+1))
 fi
 
-# Tworzymy nazwę iteracji
-SHORT_DESC=$(echo "$DESCRIPTION" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]')
-ITER_NAME=$(printf "iter_%03d_%s" $NUM $SHORT_DESC)
+# Tworzymy nazwę iteracji (2-cyfrowa + underscore + pierwsze 20 znaków)
+SHORT_DESC=$(echo "$DESCRIPTION" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]' | cut -c1-20)
+ITER_NAME=$(printf "%02d_%s" $NUM $SHORT_DESC)
 ITER_PATH="$ITERATIONS_DIR/$ITER_NAME"
 mkdir -p "$ITER_PATH/frontend" "$ITER_PATH/backend" "$ITER_PATH/workers" "$ITER_PATH/api" "$ITER_PATH/deployment"
 
@@ -36,18 +36,33 @@ done
 
 # --- 3. Prompt dla LLM ---
 read -r -d '' PROMPT <<EOM
-Stwórz nową iterację projektu GenerycznyApp:
-- Nowa iteracja: $ITER_NAME
-- Funkcjonalność: $DESCRIPTION
-- Uwzględnij wcześniejsze iteracje: $PREV_ITERS
-- Komponenty ostatnich iteracji i pliki:
-$PREV_CONTENT
-- Generuj komponenty w folderach: frontend, backend, workers, api, deployment
-- Dodaj Docker/SSH w deployment
-- Uwzględnij llm.yaml i test.yaml
-- Zaktualizuj registry.yaml
-- Wygeneruj minimalne scenariusze testowe dla test.yaml
-- Wygeneruj fragmenty do docker-compose.yml dla nowych komponentów
+Stwórz kompletną implementację dla projektu GenerycznyApp:
+
+ZADANIE: $DESCRIPTION
+
+WYMAGANIA:
+- Wygeneruj PEŁNE PLIKI KODU, nie tylko nazwy
+- Każdy komponent musi mieć pełną implementację
+- Używaj warstw: frontend, backend, workers, api, deployment
+
+PRZYKŁAD ODPOWIEDZI JSON:
+{
+  "components": [
+    {
+      "name": "user_profile",
+      "layer": "frontend", 
+      "template": "// User Profile Component\nconst UserProfile = {\n  init() {\n    this.loadProfile();\n  },\n  loadProfile() {\n    fetch('/api/user/profile')\n      .then(response => response.json())\n      .then(data => this.renderProfile(data));\n  },\n  renderProfile(data) {\n    const container = document.getElementById('profile-container');\n    container.innerHTML = \`<h2>Profil użytkownika</h2><p>Nazwa: \${data.name}</p><p>Email: \${data.email}</p>\`;\n  }\n};\nUserProfile.init();"
+    },
+    {
+      "name": "profile_api", 
+      "layer": "backend",
+      "template": "// Profile API Backend\nconst express = require('express');\nconst app = express();\n\napp.use(express.json());\n\napp.get('/api/user/profile', (req, res) => {\n  const profile = {\n    name: 'Jan Kowalski',\n    email: 'jan@example.com',\n    validated: true\n  };\n  res.json(profile);\n});\n\napp.listen(3000, () => console.log('Profile API running on port 3000'));"
+    }
+  ],
+  "version": "0.1"
+}
+
+WYGENERUJ TERAZ KOMPLETNĄ IMPLEMENTACJĘ dla zadania: $DESCRIPTION
 EOM
 
 # --- 4. Wywołanie Ollama ---
@@ -142,9 +157,24 @@ else:
     docker_compose = {"version": "3.9", "services": {}}
 
 for comp in data.get("components", []):
-    layer = comp["layer"]
+    layer = comp.get("layer", "")
+    # Map ollama layer names to our expected layers
+    layer_mapping = {
+        "presentation": "frontend",
+        "application": "backend", 
+        "domain": "workers",
+        "infrastructure": "api",
+        "deployment": "deployment"
+    }
+    
+    # Use mapped layer or fallback to original
+    layer = layer_mapping.get(layer, layer)
+    
     if layer not in ["frontend","backend","workers","api","deployment"]:
+        print(f"Skipping component {comp.get('name', 'unknown')} with unsupported layer: {comp.get('layer', 'none')}")
         continue
+        
+    print(f"Processing component: {comp.get('name', 'unknown')} in layer: {layer}")
     # nazwa pliku
     if layer in ["frontend","backend","api"]:
         filename = f"{comp['name']}.js"

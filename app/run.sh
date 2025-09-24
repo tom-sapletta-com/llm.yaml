@@ -42,7 +42,8 @@ Wygeneruj poprawione pliki w nowym folderze iteracji.
 EOM
 )
 
-        ITER_NAME=$(printf "iter_%03d_patch" $ITER_COUNT)
+        PATCH_DESC=$(echo "$DESCRIPTION" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]' | cut -c1-15)
+        ITER_NAME=$(printf "%02d_%s_patch" $ITER_COUNT $PATCH_DESC)
         ITER_PATH="$ITERATIONS_DIR/$ITER_NAME"
         mkdir -p "$ITER_PATH/frontend" "$ITER_PATH/backend" "$ITER_PATH/workers" "$ITER_PATH/api" "$ITER_PATH/deployment"
 
