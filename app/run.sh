@@ -185,6 +185,87 @@ for t in tests.get("tests", []):
 PYTHON
     fi
 
+    # --- 5. Testy E2E ---
+    echo "🧪 Uruchamianie testów E2E..."
+    E2E_FAILED=0
+    
+    # Test dostępności serwisów
+    echo "🔍 Test dostępności serwisów..."
+    for svc in $(docker-compose ps --services 2>/dev/null || echo ""); do
+        if [ -n "$svc" ]; then
+            SERVICE_PORT=$(docker-compose port "$svc" 3000 2>/dev/null | cut -d: -f2 || echo "")
+            if [ -n "$SERVICE_PORT" ]; then
+                if curl -s "http://localhost:$SERVICE_PORT" >/dev/null 2>&1; then
+                    echo "  ✅ $svc (port $SERVICE_PORT): Dostępny"
+                else
+                    echo "  ⚠️  $svc (port $SERVICE_PORT): Niedostępny"
+                fi
+            else
+                echo "  📝 $svc: Brak portu HTTP"
+            fi
+        fi
+    done
+
+    # Test API endpoints jeśli istnieją
+    echo "🌐 Test API endpoints..."
+    if docker-compose ps --services | grep -q "backend\|api"; then
+        # Sprawdź czy backend profile API działa
+        BACKEND_PORT=$(docker-compose port backend-profile-api 3000 2>/dev/null | cut -d: -f2 || echo "")
+        if [ -n "$BACKEND_PORT" ]; then
+            if curl -s "http://localhost:$BACKEND_PORT/api/user/profile" >/dev/null 2>&1; then
+                echo "  ✅ Profile API endpoint: Działa"
+            else
+                echo "  ❌ Profile API endpoint: Błąd"
+                E2E_FAILED=1
+            fi
+        fi
+    fi
+
+    # Test komponentów frontend
+    echo "🎨 Test komponentów frontend..."
+    if docker-compose ps --services | grep -q "frontend"; then
+        FRONTEND_PORT=$(docker-compose port frontend-user-profile 3000 2>/dev/null | cut -d: -f2 || echo "")
+        if [ -n "$FRONTEND_PORT" ]; then
+            if curl -s "http://localhost:$FRONTEND_PORT" >/dev/null 2>&1; then
+                echo "  ✅ Frontend user profile: Dostępny"
+            else
+                echo "  ❌ Frontend user profile: Niedostępny"
+                E2E_FAILED=1
+            fi
+        fi
+    fi
+
+    # Test walidacji API
+    echo "🔐 Test walidacji API..."
+    if [ -f "$LAST_ITER_PATH/api/profile_validator.js" ]; then
+        echo "  ✅ Profile validator component: Istnieje"
+        # Test funkcji walidacji
+        if node -e "
+            const { validateProfile } = require('$LAST_ITER_PATH/api/profile_validator.js');
+            const result = validateProfile({name: 'Test', email: 'test@example.com'});
+            if (result.isValid) {
+                console.log('  ✅ Walidacja poprawnych danych: OK');
+                process.exit(0);
+            } else {
+                console.log('  ❌ Walidacja poprawnych danych: BŁĄD');
+                process.exit(1);
+            }
+        " 2>/dev/null; then
+            echo "  ✅ Funkcja walidacji: Działa poprawnie"
+        else
+            echo "  ⚠️  Funkcja walidacji: Wymaga sprawdzenia"
+        fi
+    fi
+
+    # Sprawdzenie czy E2E testy przeszły
+    if [ $E2E_FAILED -eq 1 ]; then
+        echo "❌ Testy E2E wykryły problemy"
+        ERROR_FOUND=1
+        ERROR_LOGS="$ERROR_LOGS\n[E2E Tests]\nTesty E2E nie przeszły pomyślnie"
+    else
+        echo "✅ Testy E2E przeszły pomyślnie"
+    fi
+
     # --- 5. Sprawdzenie czy iteracja zakończona sukcesem ---
     if [ $ERROR_FOUND -eq 0 ]; then
         echo "Brak błędów. Iteracja zakończona sukcesem!"

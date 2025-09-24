@@ -155,6 +155,51 @@ for comp in data.get("components", []):
     path = os.path.join(iter_path, layer, filename)
     with open(path, "w") as f:
         f.write(comp["template"])
+    
+    # Utwórz Dockerfile dla każdego komponentu
+    dockerfile_path = os.path.join(iter_path, layer, "Dockerfile")
+    dockerfile_content = ""
+    
+    if layer == "frontend":
+        dockerfile_content = """FROM node:18-alpine
+WORKDIR /app/frontend
+COPY package*.json ./
+RUN npm install --only=production || echo "No package.json found"
+COPY . .
+EXPOSE 3000
+CMD ["node", "server.js"]"""
+    elif layer == "backend":
+        dockerfile_content = """FROM node:18-alpine
+WORKDIR /app/backend
+COPY package*.json ./
+RUN npm install --only=production || echo "No package.json found"
+COPY . .
+EXPOSE 3000
+CMD ["node", "index.js"]"""
+    elif layer == "api":
+        dockerfile_content = """FROM node:18-alpine
+WORKDIR /app/api
+COPY package*.json ./
+RUN npm install --only=production || echo "No package.json found"
+COPY . .
+EXPOSE 3000
+CMD ["node", "server.js"]"""
+    elif layer == "workers":
+        dockerfile_content = """FROM python:3.9-slim
+WORKDIR /app/workers
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt || echo "No requirements.txt found"
+COPY . .
+CMD ["python", "worker.py"]"""
+    elif layer == "deployment":
+        dockerfile_content = """FROM alpine:latest
+WORKDIR /app/deployment
+RUN apk add --no-cache bash
+COPY . .
+CMD ["./deploy.sh"]"""
+    
+    with open(dockerfile_path, "w") as f:
+        f.write(dockerfile_content)
 
     # --- Registry ---
     registry["components"][comp["name"]] = {
