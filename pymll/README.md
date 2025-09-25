@@ -45,6 +45,114 @@ chmod +x ymll.py
 ./ymll.py run
 ```
 
+
+
+## 🔧 Konfiguracja modelu:
+
+Edytuj `ymll.config.yaml` po inicjalizacji:
+
+```yaml
+llm:
+  model: qwen2.5-coder:7b  # Zmień na preferowany
+  temperature: 0.2          # Niższe = bardziej deterministyczne
+  max_tokens: 8192          # Więcej tokenów dla większych projektów
+```
+
+
+```shell
+$ ./ymll.py init
+2025-09-25 11:20:05,306 - INFO - 🎯 Inicjalizacja projektu YMLL v3...
+2025-09-25 11:20:05,308 - INFO - ✅ Projekt zainicjalizowany
+
+$ ./ymll.py generate "Simple product API" \
+  --frameworks "frontend:express,backend:fastapi"
+2025-09-25 11:20:19,058 - INFO - 🚀 Generowanie iteracji: Simple product API
+2025-09-25 11:20:19,059 - INFO - 📞 Wywołanie modelu: qwen2.5-coder:7b
+2025-09-25 11:20:25,135 - INFO - 🔍 Rozpoczynam parsowanie odpowiedzi LLM...
+2025-09-25 11:20:25,135 - INFO - 🔍 Testuję 5 wzorców JSON...
+2025-09-25 11:20:25,135 - INFO - ✅ Pomyślnie sparsowano JSON metodą 'markdown_json_block'
+2025-09-25 11:20:25,135 - INFO - 📊 Znaleziono 2 komponentów
+2025-09-25 11:20:25,135 - INFO -   - frontend (frontend/express): 2 plików
+2025-09-25 11:20:25,136 - INFO -   - backend (backend/fastapi): 2 plików
+2025-09-25 11:20:25,136 - INFO - 🎯 Użyto metody parsowania: markdown_json_block
+2025-09-25 11:20:25,136 - INFO - 💾 Zapisano komponenty do: iterations/01_simpleproductapi/components.json
+2025-09-25 11:20:25,136 - INFO - 🔨 Rozpoczynam generowanie plików komponentów...
+2025-09-25 11:20:25,136 - INFO - 🔨 Generuję komponent 1/2: frontend
+2025-09-25 11:20:25,136 - INFO -   ✅ Utworzono: iterations/01_simpleproductapi/frontend/server.js
+2025-09-25 11:20:25,136 - INFO -   ✅ Utworzono: iterations/01_simpleproductapi/frontend/package.json
+2025-09-25 11:20:25,136 - INFO -   ✅ Utworzono Dockerfile dla frontend
+2025-09-25 11:20:25,136 - INFO - 🔨 Generuję komponent 2/2: backend
+2025-09-25 11:20:25,136 - INFO -   ✅ Utworzono: iterations/01_simpleproductapi/backend/main.py
+2025-09-25 11:20:25,137 - INFO -   ✅ Utworzono: iterations/01_simpleproductapi/backend/requirements.txt
+2025-09-25 11:20:25,137 - INFO -   ✅ Utworzono Dockerfile dla backend
+2025-09-25 11:20:25,137 - INFO - ✅ Parsowanie i generowanie plików zakończone pomyślnie
+2025-09-25 11:20:25,137 - INFO - 🔍 Walidacja iteracji...
+2025-09-25 11:20:25,137 - INFO -   ℹ️ Opcjonalny katalog api jest pusty
+2025-09-25 11:20:25,137 - INFO -   ℹ️ Opcjonalny katalog workers jest pusty
+2025-09-25 11:20:25,137 - INFO -   ✅ Walidacja pomyślna
+2025-09-25 11:20:25,137 - INFO - ✅ Iteracja 01_simpleproductapi wygenerowana pomyślnie
+2025-09-25 11:20:25,138 - INFO - ✅ Docker Compose zaktualizowany
+
+$ ./ymll.py run
+2025-09-25 11:21:04,513 - INFO - 🔄 Uruchamianie self-healing workflow...
+2025-09-25 11:21:04,513 - INFO - 🎯 Uruchamianie iteracji: 01_simpleproductapi
+2025-09-25 11:21:04,513 - INFO - ========== Próba 1/5 ==========
+2025-09-25 11:21:09,234 - INFO - 🐳 Docker Compose uruchomiony
+2025-09-25 11:21:19,328 - INFO -   Frontend: ✅
+2025-09-25 11:21:19,333 - INFO -   Backend: ✅ (http://localhost:3100/docs)
+2025-09-25 11:21:19,333 - INFO - ✅ Wszystkie testy przeszły pomyślnie!
+```
+
+[http://localhost:3100/docs](http://localhost:3100/docs)
+![img.png](img.png)
+
+
+### 🧹 Teraz wyczyść i uruchom od nowa:
+
+```bash
+# 1. Zatrzymaj wszystko
+docker-compose down
+docker stop $(docker ps -aq)
+
+# 2. Wyczyść stare iteracje
+rm -rf iterations/*
+rm -f docker-compose.yml
+
+# 3. Zainicjuj od nowa
+./ymll.py init
+
+# 4. Wygeneruj prostszy projekt (test podstawowy)
+./ymll.py generate "Simple product API" \
+  --frameworks "frontend:express,backend:fastapi"
+
+# 5. Sprawdź co wygenerowano
+ls -la iterations/*/
+cat iterations/*/backend/main.py
+cat iterations/*/backend/Dockerfile
+
+# 6. Uruchom
+./ymll.py run
+```
+
+### 📊 Debugowanie jeśli coś nie działa:
+
+```bash
+# Sprawdź logi dokładnie
+docker-compose logs backend
+docker-compose logs api
+
+# Test ręczny backend
+docker-compose exec backend sh
+# w kontenerze:
+python -c "import main; print(main.app)"
+uvicorn main:app --host 0.0.0.0 --port 3100
+
+# Sprawdź porty
+docker-compose ps
+netstat -tulpn | grep -E "3003|3100|3200"
+```
+
+
 ## 🧪 Przykładowe przypadki użycia:
 
 ### Przypadek 1: Microservices z różnymi technologiami
@@ -149,68 +257,6 @@ func main() {
 }
 ```
 
-## ✨ Zalety systemu Python:
-
-
-## 🔧 Konfiguracja modelu:
-
-Edytuj `ymll.config.yaml` po inicjalizacji:
-
-```yaml
-llm:
-  model: qwen2.5-coder:7b  # Zmień na preferowany
-  temperature: 0.2          # Niższe = bardziej deterministyczne
-  max_tokens: 8192          # Więcej tokenów dla większych projektów
-```
-
-
-
-### ✅ Co zostało naprawione:
-
-### 🧹 Teraz wyczyść i uruchom od nowa:
-
-```bash
-# 1. Zatrzymaj wszystko
-docker-compose down
-docker stop $(docker ps -aq)
-
-# 2. Wyczyść stare iteracje
-rm -rf iterations/*
-rm -f docker-compose.yml
-
-# 3. Zainicjuj od nowa
-./ymll.py init
-
-# 4. Wygeneruj prostszy projekt (test podstawowy)
-./ymll.py generate "Simple product API" \
-  --frameworks "frontend:express,backend:fastapi"
-
-# 5. Sprawdź co wygenerowano
-ls -la iterations/*/
-cat iterations/*/backend/main.py
-cat iterations/*/backend/Dockerfile
-
-# 6. Uruchom
-./ymll.py run
-```
-
-### 📊 Debugowanie jeśli coś nie działa:
-
-```bash
-# Sprawdź logi dokładnie
-docker-compose logs backend
-docker-compose logs api
-
-# Test ręczny backend
-docker-compose exec backend sh
-# w kontenerze:
-python -c "import main; print(main.app)"
-uvicorn main:app --host 0.0.0.0 --port 3100
-
-# Sprawdź porty
-docker-compose ps
-netstat -tulpn | grep -E "3000|3100|3200"
-```
 
 ## Aktualny stan
 
@@ -224,7 +270,7 @@ netstat -tulpn | grep -E "3000|3100|3200"
 8. 
 1. **Lepsze parsowanie JSON z LLM** - obsługa różnych formatów i usuwanie znaków kontrolnych
 2. **Normalizacja nazw warstw** - automatyczna zamiana "worker" → "workers"
-3. **Poprawione Dockerfiles** - właściwe porty dla każdej warstwy (3000, 3100, 3200)
+3. **Poprawione Dockerfiles** - właściwe porty dla każdej warstwy (3003, 3100, 3200)
 4. **Lepsza walidacja** - tylko frontend i backend są wymagane, api/workers są opcjonalne
 5. **Next.js package.json** - automatyczne dodawanie brakujących skryptów build/start
 6. **FastAPI E2E testy** - testowanie wielu endpointów including /docs

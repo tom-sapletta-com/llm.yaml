@@ -31,7 +31,7 @@ W praktyce LLM zamiast „delikatnych operacji chirurgicznych” często przepis
 To wygląda jak „1/10” efektywności w porównaniu do czystego generowania.
 
 ## Założenia
- które optymalizują czas dostarczenia oczekiwanych rezultatów:
+ Jak efektywnie dostarczać oczekiwane rezultatów?
 - istota celu generowania kodu jest mniej istotna niż forma, środowisko i techstack, które decydują o tym, czy dana usługa zadziała
 - specyfikacja nie jest wystarczająca do utworzenia poprawnie działającej usługi
 - konieczne jest określenie wektora rozwoju, często przy refaktoryzacji dochodzi do koneicznosci określenia większej ilości tetsów i twoprzy się gó©ka zadań
@@ -54,6 +54,7 @@ To wygląda jak „1/10” efektywności w porównaniu do czystego generowania.
 
 
 ![img.png](img.png)
+
 
 ## Podsumowanie
 

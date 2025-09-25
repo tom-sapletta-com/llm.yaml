@@ -65,7 +65,7 @@ class FrameworkRegistry:
             entrypoint="server.js",
             dependencies_file="package.json",
             dockerfile_template="node",
-            port=3000,
+            port=3003,
             test_command="npm test"
         ),
         "nextjs": FrameworkConfig(
@@ -75,7 +75,7 @@ class FrameworkRegistry:
             entrypoint="app/page.tsx",
             dependencies_file="package.json",
             dockerfile_template="node",
-            port=3000,
+            port=3003,
             test_command="npm test",
             build_command="npm run build"
         ),
@@ -86,7 +86,7 @@ class FrameworkRegistry:
             entrypoint="src/main.ts",
             dependencies_file="package.json",
             dockerfile_template="node",
-            port=3000,
+            port=3003,
             test_command="npm test"
         ),
 
@@ -141,7 +141,7 @@ class FrameworkRegistry:
             entrypoint="main.go",
             dependencies_file="go.mod",
             dockerfile_template="go",
-            port=3000,
+            port=3003,
             test_command="go test ./..."
         ),
 
@@ -192,7 +192,7 @@ class FrameworkRegistry:
             entrypoint="config/application.rb",
             dependencies_file="Gemfile",
             dockerfile_template="ruby",
-            port=3000,
+            port=3003,
             test_command="rails test"
         ),
 
@@ -256,7 +256,7 @@ class YMLLSystem:
             "layers": {
                 "frontend": {
                     "frameworks": ["express", "nextjs", "react", "vue"],
-                    "port_range": [3000, 3099]
+                    "port_range": [3003, 3099]
                 },
                 "backend": {
                     "frameworks": ["fastapi", "django", "express", "spring"],
@@ -810,13 +810,13 @@ Długość odpowiedzi: {len(llm_response)}
 
         # Mapowanie portów dla warstw
         port_map = {
-            "frontend": 3000,
+            "frontend": 3003,
             "backend": 3100,
             "api": 3200,
             "workers": None
         }
 
-        port = port_map.get(layer, 3000)
+        port = port_map.get(layer, 3003)
 
         # Znajdź odpowiedni template
         if framework in FrameworkRegistry.FRAMEWORKS:
@@ -869,7 +869,7 @@ CMD ["node", "server.js"]"""
                 if template_file.exists():
                     template = template_file.read_text()
                     dockerfile = template.format(
-                        port=port if port else 3000,
+                        port=port if port else 3003,
                         entrypoint=fw_config.entrypoint
                     )
                 else:
@@ -878,7 +878,7 @@ CMD ["node", "server.js"]"""
 WORKDIR /app
 COPY . .
 RUN npm install || pip install -r requirements.txt || go mod download || true
-EXPOSE {port if port else 3000}
+EXPOSE {port if port else 3003}
 CMD ["node", "server.js"]"""
         else:
             # Generyczny Dockerfile bazowany na plikach
@@ -967,7 +967,7 @@ CMD ["sh", "-c", "echo 'No specific runtime detected'"]"""
             "services": {}
         }
 
-        ports = {"frontend": 3000, "backend": 3100, "api": 3200}
+        ports = {"frontend": 3003, "backend": 3100, "api": 3200}
 
         for layer in ["frontend", "backend", "api", "workers"]:
             layer_path = iter_path / layer
@@ -1063,7 +1063,7 @@ CMD ["sh", "-c", "echo 'No specific runtime detected'"]"""
 
         # Test frontend
         try:
-            resp = requests.get("http://localhost:3000", timeout=5)
+            resp = requests.get("http://localhost:3003", timeout=5)
             tests_passed.append(resp.status_code == 200)
             logger.info(f"  Frontend: {'✅' if resp.status_code == 200 else '❌'}")
         except:
@@ -1172,7 +1172,7 @@ Focus on fixing the specific errors mentioned.
                         "server.js": """const express = require('express');
 const app = express();
 app.get('/', (req, res) => res.send('<h1>Frontend Running</h1>'));
-app.listen(3000, () => console.log('Frontend on port 3000'));""",
+app.listen(3003, () => console.log('Frontend on port 3003'));""",
                         "package.json": """{
   "name": "frontend",
   "version": "1.0.0",
