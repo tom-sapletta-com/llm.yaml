@@ -37,6 +37,7 @@ class LLMModel(Enum):
     QWEN_CODER = "qwen2.5-coder:7b"  # Najlepszy do debugowania
     DEEPSEEK_CODER = "deepseek-coder:6.7b"  # Dobry do analizy
     CODELLAMA_13B = "codellama:13b"  # Większy kontekst
+    DEEPSEEK_R1 = "deepseek-r1:7b"  # Nowy model z reasoning
     GRANITE_CODE = "granite-code:8b"  # IBM, stabilny
     MISTRAL = "mistral:7b"  # Fallback
 
@@ -48,6 +49,7 @@ class RepairMetrics:
     test_coverage: float  # T - pokrycie testami (0..1)
     available_context: float  # K - dostępny kontekst (0..1)
     model_capability: float  # S - zdolności modelu (0..1)
+    historical_success_rate: float = 0.0  # H - historyczna skuteczność (0..1)
 
     # Parametry modelu (kalibrowane)
     gamma: float = 2.0
@@ -56,6 +58,7 @@ class RepairMetrics:
     beta: float = 0.6
     gamma_prime: float = 0.7
     delta: float = 0.9
+    eta: float = 0.4  # Waga dla historycznej skuteczności
 
 
 @dataclass
@@ -69,6 +72,12 @@ class RepairResult:
     decision: str  # 'repair' lub 'rebuild'
     confidence: float
     error_log: Optional[str] = None
+    
+    # Nowe pola dla adaptacyjnej oceny
+    model_used: str = ""
+    problem_category: str = ""
+    execution_time: float = 0.0
+    timestamp: datetime = field(default_factory=datetime.now)
 
 
 class RepairDecisionModel:
@@ -99,17 +108,18 @@ class RepairDecisionModel:
     @staticmethod
     def calculate_success_probability(metrics: RepairMetrics) -> float:
         """
-        Oblicza prawdopodobieństwo sukcesu:
-        P_fix = σ(αK + βT + γ'S - δD_norm)
+        Oblicza prawdopodobieństwo sukcesu z uwzględnieniem historii:
+        P_fix = σ(αK + βT + γ'S + ηH - δD_norm)
         """
         # Normalizacja długu technicznego
         d_norm = min(metrics.technical_debt / 100, 1.0)
 
-        # Funkcja logitowa
+        # Funkcja logitowa z historyczną skutecznością
         x = (
                 metrics.alpha * metrics.available_context +
                 metrics.beta * metrics.test_coverage +
-                metrics.gamma_prime * metrics.model_capability -
+                metrics.gamma_prime * metrics.model_capability +
+                metrics.eta * metrics.historical_success_rate -
                 metrics.delta * d_norm
         )
 
@@ -144,15 +154,27 @@ class RepairSystem:
 
     def __init__(self,
                  model: LLMModel = LLMModel.QWEN_CODER,
-                 repair_dir: str = "./repairs"):
+                 repair_dir: str = "./repairs",
+                 config_path: str = "./llm.config.yaml"):
 
         self.model = model
         self.repair_dir = Path(repair_dir)
         self.repair_dir.mkdir(exist_ok=True)
+        
+        # Załaduj konfigurację
+        self.config = self._load_config(config_path)
+        self.model_config = self._get_model_config()
+        
+        # Sprawdź i pobierz model jeśli potrzeba
+        self._ensure_model_available()
+        
+        # Historia dla adaptacyjnej oceny
+        self.history_file = self.repair_dir / "repair_history.json"
+        self.history = self._load_history()
 
         # Konfiguracja
-        self.max_iterations = 5
-        self.timeout_seconds = 120
+        self.max_iterations = self.config.get('global', {}).get('max_repair_iterations', 5)
+        self.timeout_seconds = self.config.get('global', {}).get('timeout_seconds', 120)
 
     def triage(self,
                error_file: Path,
@@ -163,15 +185,20 @@ class RepairSystem:
         """
         logger.info("🔍 Rozpoczynam triage...")
 
-        # Analiza błędu
+        # Analiza błędu i kategoryzacja problemu
         error_content = error_file.read_text() if error_file.exists() else ""
+        problem_category = self._categorize_problem(error_content)
+        
+        # Historyczna skuteczność dla tej kategorii
+        historical_success = self._get_historical_success_rate(problem_category)
 
-        # Zbieranie metryk
+        # Zbieranie metryk z dynamiczną zdolnością modelu
         metrics = RepairMetrics(
             technical_debt=self._calculate_technical_debt(source_dir),
             test_coverage=self._calculate_test_coverage(source_dir),
             available_context=self._calculate_available_context(source_dir, error_content),
-            model_capability=self._get_model_capability()
+            model_capability=self._get_model_capability(problem_category),
+            historical_success_rate=historical_success
         )
 
         # Liczenie LOC
@@ -182,6 +209,8 @@ class RepairSystem:
         logger.info(f"  - Pokrycie testami: {metrics.test_coverage:.2%}")
         logger.info(f"  - Dostępny kontekst: {metrics.available_context:.2%}")
         logger.info(f"  - Zdolności modelu: {metrics.model_capability:.2%}")
+        logger.info(f"  - Historyczna skuteczność: {metrics.historical_success_rate:.2%}")
+        logger.info(f"  - Kategoria problemu: {problem_category}")
         logger.info(f"  - LOC: {loc}")
 
         return metrics
@@ -614,16 +643,37 @@ Consider manual intervention or rebuilding the component.
 
         return min(context_score, 1.0)
 
-    def _get_model_capability(self) -> float:
-        """Zwraca zdolności modelu"""
-        capabilities = {
-            LLMModel.QWEN_CODER: 0.85,
-            LLMModel.DEEPSEEK_CODER: 0.80,
-            LLMModel.CODELLAMA_13B: 0.75,
-            LLMModel.GRANITE_CODE: 0.70,
-            LLMModel.MISTRAL: 0.60
-        }
-        return capabilities.get(self.model, 0.5)
+    def _get_model_capability(self, problem_category: str = "general") -> float:
+        """Dynamiczna zdolność modelu z uwzględnieniem parametrów i historii"""
+        # Bazowa zdolność z konfiguracji
+        base_capability = self.model_config.get('base_capability', 0.5)
+        
+        # Parametry modelu
+        max_tokens = self.model_config.get('max_tokens', 8192)
+        temperature = self.model_config.get('temperature', 0.2)
+        context_window = self.model_config.get('context_window', 8192)
+        
+        # Dynamiczne bonusy z konfiguracji globalnej
+        calc_config = self.config.get('global', {}).get('capability_calculation', {})
+        
+        # Bonus za większy kontekst tokenów
+        token_bonus = max(0, max_tokens - 8192) * calc_config.get('token_bonus_multiplier', 0.0001)
+        
+        # Penalty za wysoką temperaturę
+        temp_penalty = temperature * calc_config.get('temperature_penalty', 0.2)
+        
+        # Bonus za większe okno kontekstu
+        context_bonus = max(0, context_window - 8192) * calc_config.get('context_bonus_multiplier', 0.0001)
+        
+        # Historyczna skuteczność dla danej kategorii problemu
+        historical_bonus = self._get_historical_success_rate(problem_category) * 0.1
+        
+        # Oblicz końcową zdolność
+        final_capability = base_capability + token_bonus - temp_penalty + context_bonus + historical_bonus
+        
+        # Ogranicz do maksymalnej wartości
+        max_cap = calc_config.get('max_capability', 0.95)
+        return min(final_capability, max_cap)
 
     def _count_lines_of_code(self, source_dir: Path) -> int:
         """Liczy linie kodu"""
@@ -635,6 +685,200 @@ Consider manual intervention or rebuilding the component.
                 except:
                     pass
         return loc
+
+    def _load_config(self, config_path: str) -> Dict:
+        """Ładuje konfigurację z pliku YAML"""
+        config_file = Path(config_path)
+        if not config_file.exists():
+            logger.warning(f"⚠️ Nie znaleziono pliku konfiguracji: {config_path}, używam wartości domyślnych")
+            return self._get_default_config()
+        
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+                logger.info(f"✅ Załadowano konfigurację z: {config_path}")
+                return config
+        except Exception as e:
+            logger.error(f"❌ Błąd wczytywania konfiguracji: {e}")
+            return self._get_default_config()
+    
+    def _get_default_config(self) -> Dict:
+        """Zwraca domyślną konfigurację"""
+        return {
+            'qwen': {
+                'model': 'qwen2.5-coder:7b',
+                'max_tokens': 16384,
+                'temperature': 0.2,
+                'base_capability': 0.85
+            },
+            'global': {
+                'timeout_seconds': 120,
+                'max_repair_iterations': 5,
+                'capability_calculation': {
+                    'token_bonus_multiplier': 0.0001,
+                    'temperature_penalty': 0.2,
+                    'max_capability': 0.95
+                }
+            }
+        }
+    
+    def _get_model_config(self) -> Dict:
+        """Pobiera konfigurację dla bieżącego modelu"""
+        model_name = self.model.value.split(':')[0].replace('.', '').replace('-', '')
+        
+        # Mapowanie nazw modeli na klucze konfiguracji
+        model_mapping = {
+            'qwen25coder': 'qwen',
+            'deepseekcoder': 'deepseek', 
+            'codellama': 'codellama13b',
+            'deepseekr1': 'deepseek-r1',
+            'granitecode': 'granite',
+            'mistral': 'mistral'
+        }
+        
+        config_key = model_mapping.get(model_name, 'qwen')
+        return self.config.get(config_key, self.config.get('qwen', {}))
+    
+    def _ensure_model_available(self) -> bool:
+        """Sprawdza dostępność modelu i pobiera go jeśli potrzeba"""
+        model_name = self.model.value
+        logger.info(f"🔍 Sprawdzam dostępność modelu: {model_name}")
+        
+        try:
+            # Sprawdź czy model jest dostępny
+            result = subprocess.run(
+                ["ollama", "list"],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0 and model_name in result.stdout:
+                logger.info(f"✅ Model {model_name} jest dostępny")
+                return True
+            
+            # Model nie jest dostępny - pobierz go
+            logger.info(f"📥 Pobieram model: {model_name}")
+            pull_result = subprocess.run(
+                ["ollama", "pull", model_name],
+                capture_output=True,
+                text=True,
+                timeout=600  # 10 minut na pobranie
+            )
+            
+            if pull_result.returncode == 0:
+                logger.info(f"✅ Pomyślnie pobrano model: {model_name}")
+                return True
+            else:
+                logger.error(f"❌ Błąd pobierania modelu: {pull_result.stderr}")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            logger.error(f"⏱️ Timeout przy pobieraniu modelu: {model_name}")
+            return False
+        except FileNotFoundError:
+            logger.error("❌ Ollama nie jest zainstalowane lub nie jest w PATH")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Nieoczekiwany błąd: {e}")
+            return False
+    
+    def _load_history(self) -> Dict:
+        """Ładuje historię napraw"""
+        if not self.history_file.exists():
+            return {'repairs': [], 'categories': {}}
+        
+        try:
+            with open(self.history_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"⚠️ Nie można wczytać historii: {e}")
+            return {'repairs': [], 'categories': {}}
+    
+    def _save_history(self):
+        """Zapisuje historię napraw"""
+        try:
+            with open(self.history_file, 'w', encoding='utf-8') as f:
+                json.dump(self.history, f, indent=2, default=str, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"❌ Błąd zapisu historii: {e}")
+    
+    def _categorize_problem(self, error_content: str) -> str:
+        """Kategoryzuje problem na podstawie błędu"""
+        error_lower = error_content.lower()
+        
+        # Kategoryzacja na podstawie typowych błędów
+        if any(word in error_lower for word in ['syntax', 'invalid syntax', 'unexpected token']):
+            return 'syntax_error'
+        elif any(word in error_lower for word in ['import', 'module', 'not found']):
+            return 'import_error' 
+        elif any(word in error_lower for word in ['type', 'attribute', 'object has no']):
+            return 'type_error'
+        elif any(word in error_lower for word in ['name', 'undefined', 'not defined']):
+            return 'name_error'
+        elif any(word in error_lower for word in ['connection', 'network', 'timeout']):
+            return 'network_error'
+        elif any(word in error_lower for word in ['file', 'directory', 'path']):
+            return 'file_error'
+        elif any(word in error_lower for word in ['docker', 'container', 'compose']):
+            return 'docker_error'
+        else:
+            return 'general'
+    
+    def _get_historical_success_rate(self, category: str) -> float:
+        """Zwraca historyczną skuteczność dla danej kategorii"""
+        category_data = self.history.get('categories', {}).get(category, {})
+        
+        total_attempts = category_data.get('total_attempts', 0)
+        successful_repairs = category_data.get('successful_repairs', 0)
+        
+        if total_attempts == 0:
+            return 0.0
+        
+        # Zastosuj wagę historii z konfiguracji
+        adaptive_config = self.config.get('global', {}).get('adaptive_evaluation', {})
+        decay_factor = adaptive_config.get('decay_factor', 0.95)
+        
+        # Oblicz ważoną skuteczność z decay factor
+        raw_rate = successful_repairs / total_attempts
+        return raw_rate * (decay_factor ** (total_attempts - successful_repairs))
+    
+    def _record_repair_result(self, result: RepairResult, category: str):
+        """Zapisuje wynik naprawy w historii"""
+        # Dodaj do ogólnej listy napraw
+        repair_record = {
+            'timestamp': result.timestamp.isoformat(),
+            'success': result.success,
+            'model_used': result.model_used,
+            'problem_category': category,
+            'execution_time': result.execution_time,
+            'iterations_needed': result.iterations_needed,
+            'confidence': result.confidence
+        }
+        
+        self.history['repairs'].append(repair_record)
+        
+        # Aktualizuj statystyki kategorii
+        if 'categories' not in self.history:
+            self.history['categories'] = {}
+        
+        if category not in self.history['categories']:
+            self.history['categories'][category] = {
+                'total_attempts': 0,
+                'successful_repairs': 0,
+                'last_updated': datetime.now().isoformat()
+            }
+        
+        cat_data = self.history['categories'][category]
+        cat_data['total_attempts'] += 1
+        if result.success:
+            cat_data['successful_repairs'] += 1
+        cat_data['last_updated'] = datetime.now().isoformat()
+        
+        # Zapisz historię
+        self._save_history()
+        
+        logger.info(f"📊 Zapisano wynik naprawy: {category} - {'sukces' if result.success else 'porażka'}")
 
     def _copy_relevant_files(self, source_dir: Path, mre_path: Path, error_file: Path):
         """Kopiuje tylko istotne pliki do MRE"""
@@ -914,6 +1158,12 @@ Przykłady użycia:
 
   # Użyj innego modelu
   python repair.py --error err.log --source ./app --model deepseek
+  
+  # Użyj zaawansowanego modelu z większym kontekstem
+  python repair.py --error err.log --source ./app --model codellama13b
+  
+  # Użyj najnowszego modelu z reasoning
+  python repair.py --error err.log --source ./app --model deepseek-r1
         """
     )
 
@@ -926,7 +1176,7 @@ Przykłady użycia:
     parser.add_argument('--ticket', type=str,
                         help='ID ticketu (opcjonalne)')
     parser.add_argument('--model', type=str, default='qwen',
-                        choices=['qwen', 'deepseek', 'codellama', 'granite', 'mistral'],
+                        choices=['qwen', 'deepseek', 'codellama13b', 'deepseek-r1', 'granite', 'mistral'],
                         help='Model LLM do użycia')
     parser.add_argument('--analyze', action='store_true',
                         help='Tylko analiza, bez naprawy')
@@ -945,7 +1195,8 @@ Przykłady użycia:
     model_map = {
         'qwen': LLMModel.QWEN_CODER,
         'deepseek': LLMModel.DEEPSEEK_CODER,
-        'codellama': LLMModel.CODELLAMA_13B,
+        'codellama13b': LLMModel.CODELLAMA_13B,
+        'deepseek-r1': LLMModel.DEEPSEEK_R1,
         'granite': LLMModel.GRANITE_CODE,
         'mistral': LLMModel.MISTRAL
     }
@@ -966,9 +1217,13 @@ Przykłady użycia:
         logger.error(f"❌ Katalog źródłowy nie istnieje: {source_dir}")
         return 1
 
-    # Inicjalizacja systemu
-    repair_system = RepairSystem(model=model)
+    # Inicjalizacja systemu z konfiguracją
+    config_path = Path("./llm.config.yaml")
+    repair_system = RepairSystem(model=model, config_path=str(config_path))
     repair_system.max_iterations = args.max_iterations
+    
+    logger.info(f"🤖 Użyto modelu: {model.value}")
+    logger.info(f"⚙️  Konfiguracja: {repair_system.model_config.get('max_tokens', 8192)} tokenów, temp: {repair_system.model_config.get('temperature', 0.2)}")
 
     # Tryb analizy
     if args.analyze:
@@ -991,7 +1246,10 @@ Przykłady użycia:
         print(f"  - Pokrycie testami: {metrics.test_coverage:.2%}")
         print(f"  - Dostępny kontekst: {metrics.available_context:.2%}")
         print(f"  - Zdolności modelu: {metrics.model_capability:.2%}")
+        print(f"  - Historyczna skuteczność: {metrics.historical_success_rate:.2%}")
         print(f"  - Linie kodu: {loc}")
+        print(f"  - Model użyty: {model.value}")
+        print(f"  - Parametry: {repair_system.model_config.get('max_tokens', 8192)} tokenów, temp: {repair_system.model_config.get('temperature', 0.2)}")
         print("=" * 60)
 
         return 0
@@ -1009,6 +1267,8 @@ Przykłady użycia:
             logger.info("✅ Naprawa zakończona sukcesem!")
             if result.patch_path:
                 logger.info(f"📄 Patch: {result.patch_path}")
+            logger.info(f"🎯 Iteracji potrzebnych: {result.iterations_needed}")
+            logger.info(f"⏱️  Czas wykonania: {result.execution_time:.2f}s")
             return 0
         else:
             if result.decision == "rebuild":
