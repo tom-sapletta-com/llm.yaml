@@ -1003,7 +1003,19 @@ CMD ["sh", "-c", "echo 'No specific runtime detected'"]"""
             return False
 
         latest_iter = iterations[-1]
+        
+        # Skonfiguruj logowanie do pliku w folderze iteracji
+        log_file = latest_iter / "logs.txt"
+        file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
+        file_handler.setLevel(logging.INFO)
+        file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(file_formatter)
+        
+        # Dodaj handler do loggera
+        logger.addHandler(file_handler)
+        
         logger.info(f"🎯 Uruchamianie iteracji: {latest_iter.name}")
+        logger.info(f"📄 Logi zapisywane do: {log_file}")
 
         for attempt in range(1, max_attempts + 1):
             logger.info(f"========== Próba {attempt}/{max_attempts} ==========")
@@ -1013,6 +1025,11 @@ CMD ["sh", "-c", "echo 'No specific runtime detected'"]"""
                 # Testy E2E
                 if self._run_e2e_tests():
                     logger.info("✅ Wszystkie testy przeszły pomyślnie!")
+                    
+                    # Usuń handler pliku przy sukcesie
+                    logger.removeHandler(file_handler)
+                    file_handler.close()
+                    
                     return True
                 else:
                     logger.warning("❌ Testy E2E nie przeszły")
@@ -1025,6 +1042,11 @@ CMD ["sh", "-c", "echo 'No specific runtime detected'"]"""
                 latest_iter = sorted([d for d in self.iterations_dir.iterdir() if d.is_dir()])[-1]
 
         logger.error(f"⚠️ Self-healing zakończony po {max_attempts} próbach bez sukcesu")
+        
+        # Usuń handler pliku aby uniknąć duplikatów w kolejnych uruchomieniach
+        logger.removeHandler(file_handler)
+        file_handler.close()
+        
         return False
 
     def _run_docker_compose(self) -> bool:
