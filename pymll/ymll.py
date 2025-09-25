@@ -250,7 +250,7 @@ class YMLLSystem:
             "llm": {
                 "model": self.model.value,
                 "temperature": 0.2,  # Niższe dla lepszego kodu
-                "max_tokens": 8192,
+                "max_tokens": 16384,
                 "retry_attempts": 3
             },
             "layers": {
@@ -517,50 +517,205 @@ IMPORTANT:
     def _parse_and_generate(self, llm_response: str, iter_path: Path) -> Dict:
         """Parsowanie odpowiedzi LLM i generowanie plików"""
 
+        logger.info("🔍 Rozpoczynam parsowanie odpowiedzi LLM...")
+        logger.debug(f"Długość odpowiedzi LLM: {len(llm_response)} znaków")
+        logger.debug(f"Pierwsze 200 znaków odpowiedzi: {llm_response[:200]}")
+        
         # Próbuj wyciągnąć JSON na różne sposoby
         data = None
+        extraction_method = None
 
-        # Metoda 1: Czysty JSON
+        # Ulepszone wzorce regex dla różnych formatów
         json_patterns = [
-            r'\{.*"components".*\}',
-            r'```json\s*\n(.*?)\n```',
-            r'```\s*\n(\{.*?\})\s*\n```',
+            # Markdown code block z json
+            (r'```json\s*\n(.*?)\n```', "markdown_json_block"),
+            # Markdown code block bez specyfikacji języka
+            (r'```\s*\n(\{.*?\})\s*\n```', "markdown_generic_block"),
+            # JSON z otaczającym tekstem
+            (r'\{[^{}]*"components"[^{}]*\[[^\]]*\][^{}]*\}', "simple_components_pattern"),
+            # Bardziej złożony JSON z zagnieżdżonymi obiektami
+            (r'\{(?:[^{}]|\{[^{}]*\})*"components"(?:[^{}]|\{[^{}]*\})*\}', "complex_components_pattern"),
+            # Najbardziej elastyczny wzorzec - wszystko od { do }
+            (r'(\{.*\})', "full_json_capture"),
         ]
 
-        for pattern in json_patterns:
-            matches = re.findall(pattern, llm_response, re.DOTALL)
-            if matches:
-                for match in matches:
-                    try:
-                        json_str = match if isinstance(match, str) else match[0]
-                        # Usuń niedozwolone znaki kontrolne
-                        json_str = re.sub(r'[\x00-\x1f\x7f]', '', json_str)
-                        # Napraw escapowanie
-                        json_str = json_str.replace('\\n', '\n').replace('\\"', '"')
-                        # Spróbuj sparsować
-                        data = json.loads(json_str)
-                        if "components" in data:
-                            break
-                    except json.JSONDecodeError as e:
-                        logger.debug(f"Próba parsowania JSON nieudana: {e}")
-                        continue
-            if data:
-                break
+        logger.info(f"🔍 Testuję {len(json_patterns)} wzorców JSON...")
+
+        for i, (pattern, method_name) in enumerate(json_patterns, 1):
+            logger.debug(f"Wzorzec {i}/{len(json_patterns)} ({method_name}): {pattern[:50]}...")
+            
+            try:
+                matches = re.findall(pattern, llm_response, re.DOTALL | re.MULTILINE)
+                logger.debug(f"Znaleziono {len(matches)} dopasowań dla wzorca {method_name}")
+                
+                if matches:
+                    for j, match in enumerate(matches):
+                        logger.debug(f"Przetwarzam dopasowanie {j+1}/{len(matches)}...")
+                        
+                        try:
+                            # Wyciągnij tekst JSON
+                            json_str = match if isinstance(match, str) else str(match)
+                            
+                            # Dodatkowe czyszczenie dla markdown bloków
+                            if "markdown" in method_name:
+                                # Usuń ewentualne dodatkowe znaczniki markdown
+                                json_str = re.sub(r'^```.*\n', '', json_str)
+                                json_str = re.sub(r'\n```$', '', json_str)
+                            
+                            logger.debug(f"JSON przed czyszczeniem (pierwsze 100 znaków): {json_str[:100]}")
+                            
+                            # Napraw JSON z literalnymi znakami kontrolnymi
+                            json_str = self._sanitize_json_string(json_str)
+                            
+                            # Usuń potencjalne białe znaki na początku i końcu
+                            json_str = json_str.strip()
+                            
+                            logger.debug(f"JSON po czyszczeniu (pierwsze 100 znaków): {json_str[:100]}")
+                            
+                            # Spróbuj sparsować JSON
+                            parsed_data = json.loads(json_str)
+                            
+                            # Waliduj czy ma wymaganą strukturę
+                            if isinstance(parsed_data, dict) and "components" in parsed_data:
+                                components = parsed_data["components"]
+                                if isinstance(components, list) and len(components) > 0:
+                                    logger.info(f"✅ Pomyślnie sparsowano JSON metodą '{method_name}'")
+                                    logger.info(f"📊 Znaleziono {len(components)} komponentów")
+                                    
+                                    # Loguj komponenty
+                                    for comp in components:
+                                        comp_name = comp.get('name', 'unnamed')
+                                        comp_layer = comp.get('layer', 'unknown')
+                                        comp_framework = comp.get('framework', 'unknown')
+                                        files_count = len(comp.get('files', {}))
+                                        logger.info(f"  - {comp_name} ({comp_layer}/{comp_framework}): {files_count} plików")
+                                    
+                                    data = parsed_data
+                                    extraction_method = method_name
+                                    break
+                                else:
+                                    logger.warning(f"JSON ma pustą lub nieprawidłową listę komponentów")
+                            else:
+                                logger.warning(f"JSON nie ma wymaganej struktury 'components'")
+                                
+                        except json.JSONDecodeError as e:
+                            logger.debug(f"Błąd parsowania JSON (dopasowanie {j+1}): {str(e)}")
+                            logger.debug(f"Problematyczny fragment: {json_str[:200] if len(json_str) > 200 else json_str}")
+                            continue
+                        except Exception as e:
+                            logger.debug(f"Nieoczekiwany błąd podczas parsowania (dopasowanie {j+1}): {str(e)}")
+                            continue
+                    
+                    if data:
+                        break
+                        
+            except Exception as e:
+                logger.debug(f"Błąd wzorca {method_name}: {str(e)}")
+                continue
 
         # Jeśli nie udało się sparsować, użyj fallback
         if not data:
             logger.warning("⚠️ Nie znaleziono prawidłowego JSON w odpowiedzi LLM")
-            logger.debug(f"Odpowiedź LLM (pierwsze 500 znaków): {llm_response[:500]}")
+            logger.warning("📋 Używam domyślnych szablonów jako fallback")
+            
+            # Zapisz surową odpowiedź do analizy
+            debug_file = iter_path / "llm_response_debug.txt"
+            debug_content = f"""=== DEBUG INFORMACJE ===
+Długość odpowiedzi: {len(llm_response)}
+
+=== PEŁNA ODPOWIEDŹ LLM ===
+{llm_response}
+
+=== TESTOWANE WZORCE ===
+"""
+            for i, (pattern, method_name) in enumerate(json_patterns, 1):
+                debug_content += f"{i}. {method_name}: {pattern}\n"
+            
+            debug_file.write_text(debug_content)
+            logger.info(f"💾 Zapisano informacje debugowania do: {debug_file}")
+            
             data = self._get_fallback_data()
+            extraction_method = "fallback"
+        else:
+            logger.info(f"🎯 Użyto metody parsowania: {extraction_method}")
 
         # Zapisz sparsowany JSON
-        (iter_path / "components.json").write_text(json.dumps(data, indent=2))
+        components_file = iter_path / "components.json"
+        components_file.write_text(json.dumps(data, indent=2))
+        logger.info(f"💾 Zapisano komponenty do: {components_file}")
+
+        # Dodaj metadane o parsowaniu
+        metadata = {
+            "parsing_method": extraction_method,
+            "timestamp": time.time(),
+            "components_count": len(data.get("components", [])),
+            "success": extraction_method != "fallback"
+        }
+        
+        metadata_file = iter_path / "parsing_metadata.json"
+        metadata_file.write_text(json.dumps(metadata, indent=2))
+        logger.debug(f"💾 Zapisano metadane parsowania do: {metadata_file}")
 
         # Generuj pliki
-        for component in data.get("components", []):
+        logger.info("🔨 Rozpoczynam generowanie plików komponentów...")
+        for i, component in enumerate(data.get("components", []), 1):
+            logger.info(f"🔨 Generuję komponent {i}/{len(data.get('components', []))}: {component.get('name', 'unnamed')}")
             self._generate_component_files(component, iter_path)
 
+        logger.info("✅ Parsowanie i generowanie plików zakończone pomyślnie")
         return data
+
+    def _sanitize_json_string(self, json_str: str) -> str:
+        """Sanityzuje string JSON, naprawiając problemy z literalnymi znakami kontrolnymi"""
+        
+        logger.debug("🧹 Rozpoczynam sanityzację JSON string...")
+        logger.debug(f"Długość wejściowa: {len(json_str)} znaków")
+        
+        def escape_json_string_content(match):
+            """Escapuje zawartość stringów JSON, naprawiając literalne znaki kontrolne"""
+            opening_quote = match.group(1)  # "
+            content = match.group(2)        # zawartość między cudzysłowami
+            closing_quote = match.group(3)  # "
+            
+            # Zamień literalne znaki kontrolne na właściwe escapowanie JSON
+            content = content.replace('\n', '\\n')   # literal newline -> escaped
+            content = content.replace('\r', '\\r')   # literal carriage return
+            content = content.replace('\t', '\\t')   # literal tab
+            
+            # Napraw potencjalne podwójne escapowanie
+            content = content.replace('\\\\n', '\\n')
+            content = content.replace('\\\\r', '\\r')
+            content = content.replace('\\\\t', '\\t')
+            
+            return f'{opening_quote}{content}{closing_quote}'
+        
+        # Wzorzec dla wartości stringów JSON: "...zawartość..." 
+        # Używamy DOTALL aby obsłużyć wieloliniowe stringi
+        string_pattern = r'(")([^"]*?)(")'  
+        
+        try:
+            # Zastosuj escapowanie do wszystkich stringów JSON
+            sanitized = re.sub(string_pattern, escape_json_string_content, json_str, flags=re.DOTALL)
+            logger.debug("✅ Sanityzacja stringów JSON zakończona")
+            
+            # Dodatkowe czyszczenie
+            # Usuń trailing commas (JSON nie pozwala na końcowe przecinki)
+            sanitized = re.sub(r',\s*}', '}', sanitized)
+            sanitized = re.sub(r',\s*]', ']', sanitized)
+            
+            logger.debug(f"Długość wyjściowa: {len(sanitized)} znaków")
+            
+            # Sprawdź czy sanityzacja nie zepsuła podstawowej struktury JSON
+            if sanitized.count('{') != json_str.count('{') or sanitized.count('}') != json_str.count('}'):
+                logger.warning("⚠️ Sanityzacja mogła zepsuć strukturę JSON - używam oryginału")
+                return json_str
+            
+            return sanitized
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Błąd podczas sanityzacji JSON: {e}")
+            logger.debug(f"Próbuję z oryginalnym stringiem")
+            return json_str
 
     def _generate_component_files(self, component: Dict, iter_path: Path):
         """Generowanie plików dla komponentu"""

@@ -151,13 +151,6 @@ func main() {
 
 ## ✨ Zalety systemu Python:
 
-1. **Lepsza obsługa błędów** - try/except zamiast bash-owych pułapek
-2. **Łatwiejsze parsowanie JSON/YAML** - natywne biblioteki
-3. **Walidacja schematów** - możliwość użycia jsonschema
-4. **Logging** - profesjonalne logowanie z poziomami
-5. **Testowanie** - wbudowane unittest
-6. **Rozszerzalność** - łatwe dodawanie nowych frameworków
-7. **Cross-platform** - działa na Windows/Linux/Mac
 
 ## 🔧 Konfiguracja modelu:
 
@@ -170,20 +163,9 @@ llm:
   max_tokens: 8192          # Więcej tokenów dla większych projektów
 ```
 
-System automatycznie wybiera najlepszą strategię generowania kodu dla każdego frameworka i języka, zapewniając poprawność składniową i funkcjonalną.
 
-Widzę kilka problemów. Naprawmy je kompleksowo:## Podsumowanie napraw
-
-Naprawiłem główne problemy w systemie:
 
 ### ✅ Co zostało naprawione:
-
-1. **Lepsze parsowanie JSON z LLM** - obsługa różnych formatów i usuwanie znaków kontrolnych
-2. **Normalizacja nazw warstw** - automatyczna zamiana "worker" → "workers"
-3. **Poprawione Dockerfiles** - właściwe porty dla każdej warstwy (3000, 3100, 3200)
-4. **Lepsza walidacja** - tylko frontend i backend są wymagane, api/workers są opcjonalne
-5. **Next.js package.json** - automatyczne dodawanie brakujących skryptów build/start
-6. **FastAPI E2E testy** - testowanie wielu endpointów including /docs
 
 ### 🧹 Teraz wyczyść i uruchom od nowa:
 
@@ -231,6 +213,21 @@ netstat -tulpn | grep -E "3000|3100|3200"
 ```
 
 ## Aktualny stan
+
+1. **Lepsza obsługa błędów** - try/except zamiast bash-owych pułapek
+2. **Łatwiejsze parsowanie JSON/YAML** - natywne biblioteki
+3. **Walidacja schematów** - możliwość użycia jsonschema
+4. **Logging** - profesjonalne logowanie z poziomami
+5. **Testowanie** - wbudowane unittest
+6. **Rozszerzalność** - łatwe dodawanie nowych frameworków
+7. **Cross-platform** - działa na Windows/Linux/Mac
+8. 
+1. **Lepsze parsowanie JSON z LLM** - obsługa różnych formatów i usuwanie znaków kontrolnych
+2. **Normalizacja nazw warstw** - automatyczna zamiana "worker" → "workers"
+3. **Poprawione Dockerfiles** - właściwe porty dla każdej warstwy (3000, 3100, 3200)
+4. **Lepsza walidacja** - tylko frontend i backend są wymagane, api/workers są opcjonalne
+5. **Next.js package.json** - automatyczne dodawanie brakujących skryptów build/start
+6. **FastAPI E2E testy** - testowanie wielu endpointów including /docs
 
 1. **Backend FastAPI** uruchamia się na porcie (3100)
 2. **API FastAPI** uruchamia się na porcie 3200
