@@ -671,6 +671,9 @@ for component in data.get("components", []):
     # Upewnij się, że katalog warstwy istnieje zanim zapiszemy pliki
     os.makedirs(layer_path, exist_ok=True)
 
+    # Czy to Pythonowe API?
+    is_python_api = (layer == "api") and any(fn.endswith('.py') for fn in files.keys())
+
     # Zapisz wszystkie pliki z komponentu
     for filename, content in files.items():
         filepath = os.path.join(layer_path, filename)
@@ -683,6 +686,14 @@ for component in data.get("components", []):
                 text = str(content).replace(",", "\n").replace(";", "\n")
                 # Usuń puste linie i spacje
                 lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+                # Jeśli to API w Pythonie, zapewnij fastapi i uvicorn
+                if is_python_api:
+                    have_fastapi = any(ln.lower().startswith('fastapi') for ln in lines)
+                    have_uvicorn = any(ln.lower().startswith('uvicorn') for ln in lines)
+                    if not have_fastapi:
+                        lines.append('fastapi==0.110.0')
+                    if not have_uvicorn:
+                        lines.append('uvicorn==0.29.0')
                 content = "\n".join(lines) + "\n"
             except Exception:
                 pass
@@ -743,8 +754,8 @@ PYTHON
 run_self_healing() {
     echo "🔄 Uruchamianie self-healing workflow..."
 
-    # Znajdź najnowszą iterację
-    local LATEST_ITER=$(find "$ITERATIONS_DIR" -maxdepth 1 -type d | sort -V | tail -n 1 | xargs basename)
+    # Znajdź najnowszą iterację (wg numeru, format NN_*)
+    local LATEST_ITER=$(ls -1 "$ITERATIONS_DIR" 2>/dev/null | grep -E '^[0-9]{2}_' | sort -V | tail -1)
 
     if [ -z "$LATEST_ITER" ] || [ "$LATEST_ITER" = "iterations" ]; then
         echo "❌ Brak iteracji do uruchomienia"
@@ -814,7 +825,7 @@ run_self_healing() {
         if [ "$HAS_ERRORS" = "true" ] && [ $ITER_COUNT -lt $MAX_ITERATIONS ]; then
             echo "🔧 Generowanie patcha..."
             generate_fix_patch "$ERROR_LOGS" "$LATEST_ITER"
-            LATEST_ITER=$(find "$ITERATIONS_DIR" -maxdepth 1 -type d | sort -V | tail -n 1 | xargs basename)
+            LATEST_ITER=$(ls -1 "$ITERATIONS_DIR" 2>/dev/null | grep -E '^[0-9]{2}_' | sort -V | tail -1)
         fi
 
         docker-compose down
@@ -1009,7 +1020,7 @@ sanitize_iteration() {
     local ITER_PATH="$1"
     # Sanityzuj package.json w warstwach Node (frontend, backend, api)
     python3 - "$ITER_PATH" << 'PY'
-import json, os, sys
+import json, os, sys, re
 iter_path = sys.argv[1]
 layers = ["frontend", "backend", "api"]
 for layer in layers:
@@ -1041,6 +1052,28 @@ for layer in layers:
         print(f"✅ Zsanityzowano {pkg_path}")
     except Exception as e:
         print(f"⚠️  Nie udało się zsanityzować {pkg_path}: {e}")
+    
+# Zapewnij wymagania dla Python API (FastAPI)
+api_reqs = os.path.join(iter_path, 'api', 'requirements.txt')
+api_dir = os.path.join(iter_path, 'api')
+if os.path.isdir(api_dir) and os.path.isfile(api_reqs):
+    try:
+        with open(api_reqs, 'r') as f:
+            lines = [ln.strip() for ln in f if ln.strip()]
+        # Czy są pliki .py w API? Jeśli tak, wymuszamy uvicorn/fastapi
+        is_py_api = any(fn.endswith('.py') for fn in os.listdir(api_dir))
+        if is_py_api:
+            have_fastapi = any(ln.lower().startswith('fastapi') for ln in lines)
+            have_uvicorn = any(ln.lower().startswith('uvicorn') for ln in lines)
+            if not have_fastapi:
+                lines.append('fastapi==0.110.0')
+            if not have_uvicorn:
+                lines.append('uvicorn==0.29.0')
+            with open(api_reqs, 'w') as f:
+                f.write('\n'.join(lines) + '\n')
+            print(f"✅ Uzupełniono wymagania FastAPI/uvicorn w {api_reqs}")
+    except Exception as e:
+        print(f"⚠️  Nie udało się uzupełnić {api_reqs}: {e}")
 PY
 }
 
