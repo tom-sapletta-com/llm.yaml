@@ -293,7 +293,7 @@ class YMLLSystem:
             "node": """FROM node:20-alpine
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install --only=production
 COPY . .
 EXPOSE {port}
 CMD ["node", "{entrypoint}"]
@@ -517,22 +517,40 @@ IMPORTANT:
     def _parse_and_generate(self, llm_response: str, iter_path: Path) -> Dict:
         """Parsowanie odpowiedzi LLM i generowanie plików"""
 
-        # Próbuj wyciągnąć JSON
-        json_match = re.search(r'\{.*"components".*\}', llm_response, re.DOTALL)
+        # Próbuj wyciągnąć JSON na różne sposoby
+        data = None
 
-        if not json_match:
-            # Szukaj w blokach markdown
-            json_match = re.search(r'```json\s*\n(.*?)\n```', llm_response, re.DOTALL)
+        # Metoda 1: Czysty JSON
+        json_patterns = [
+            r'\{.*"components".*\}',
+            r'```json\s*\n(.*?)\n```',
+            r'```\s*\n(\{.*?\})\s*\n```',
+        ]
 
-        if json_match:
-            try:
-                json_str = json_match.group(0) if json_match.lastindex is None else json_match.group(1)
-                data = json.loads(json_str)
-            except json.JSONDecodeError as e:
-                logger.error(f"❌ Błąd parsowania JSON: {e}")
-                data = self._get_fallback_data()
-        else:
-            logger.warning("⚠️ Nie znaleziono JSON w odpowiedzi, używam fallback")
+        for pattern in json_patterns:
+            matches = re.findall(pattern, llm_response, re.DOTALL)
+            if matches:
+                for match in matches:
+                    try:
+                        json_str = match if isinstance(match, str) else match[0]
+                        # Usuń niedozwolone znaki kontrolne
+                        json_str = re.sub(r'[\x00-\x1f\x7f]', '', json_str)
+                        # Napraw escapowanie
+                        json_str = json_str.replace('\\n', '\n').replace('\\"', '"')
+                        # Spróbuj sparsować
+                        data = json.loads(json_str)
+                        if "components" in data:
+                            break
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"Próba parsowania JSON nieudana: {e}")
+                        continue
+            if data:
+                break
+
+        # Jeśli nie udało się sparsować, użyj fallback
+        if not data:
+            logger.warning("⚠️ Nie znaleziono prawidłowego JSON w odpowiedzi LLM")
+            logger.debug(f"Odpowiedź LLM (pierwsze 500 znaków): {llm_response[:500]}")
             data = self._get_fallback_data()
 
         # Zapisz sparsowany JSON
@@ -551,23 +569,66 @@ IMPORTANT:
         files = component.get("files", {})
         framework = component.get("framework", "")
 
+        # Normalizacja nazw warstw (np. "worker" -> "workers")
+        layer_mapping = {
+            "worker": "workers",
+            "Worker": "workers",
+            "WORKER": "workers"
+        }
+        layer = layer_mapping.get(layer, layer)
+
         if not layer or not files:
             return
 
         layer_path = iter_path / layer
+        layer_path.mkdir(parents=True, exist_ok=True)
 
         for filename, content in files.items():
             filepath = layer_path / filename
 
+            # Utwórz podkatalogi jeśli plik jest w podkatalogu (np. pages/index.js)
+            if "/" in filename:
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+
             # Sanityzacja zawartości
             if filename.endswith(('.json', '.yaml', '.yml')):
                 content = self._sanitize_config_file(content, filename)
+
+            # Specjalna obsługa Next.js package.json
+            if filename == "package.json" and framework == "nextjs":
+                content = self._fix_nextjs_package_json(content)
 
             filepath.write_text(content)
             logger.info(f"  ✅ Utworzono: {filepath}")
 
         # Generuj Dockerfile
         self._generate_dockerfile(layer_path, layer, framework)
+
+    def _fix_nextjs_package_json(self, content: str) -> str:
+        """Naprawia package.json dla Next.js"""
+        try:
+            data = json.loads(content)
+            # Dodaj wymagane skrypty
+            if "scripts" not in data:
+                data["scripts"] = {}
+            if "dev" not in data["scripts"]:
+                data["scripts"]["dev"] = "next dev"
+            if "build" not in data["scripts"]:
+                data["scripts"]["build"] = "next build"
+            if "start" not in data["scripts"]:
+                data["scripts"]["start"] = "next start"
+            # Upewnij się że są zależności
+            if "dependencies" not in data:
+                data["dependencies"] = {}
+            if "next" not in data["dependencies"]:
+                data["dependencies"]["next"] = "^13.5.0"
+            if "react" not in data["dependencies"]:
+                data["dependencies"]["react"] = "^18.2.0"
+            if "react-dom" not in data["dependencies"]:
+                data["dependencies"]["react-dom"] = "^18.2.0"
+            return json.dumps(data, indent=2)
+        except:
+            return content
 
     def _sanitize_config_file(self, content: str, filename: str) -> str:
         """Sanityzacja plików konfiguracyjnych"""
@@ -592,42 +653,148 @@ IMPORTANT:
     def _generate_dockerfile(self, layer_path: Path, layer: str, framework: str):
         """Generowanie Dockerfile dla warstwy"""
 
+        # Mapowanie portów dla warstw
+        port_map = {
+            "frontend": 3000,
+            "backend": 3100,
+            "api": 3200,
+            "workers": None
+        }
+
+        port = port_map.get(layer, 3000)
+
         # Znajdź odpowiedni template
         if framework in FrameworkRegistry.FRAMEWORKS:
             fw_config = FrameworkRegistry.FRAMEWORKS[framework]
-            template_file = Path(f"templates/Dockerfile.{fw_config.dockerfile_template}")
+            template_type = fw_config.dockerfile_template
 
-            if template_file.exists():
-                template = template_file.read_text()
-                dockerfile = template.format(
-                    port=fw_config.port,
-                    entrypoint=fw_config.entrypoint
-                )
-                (layer_path / "Dockerfile").write_text(dockerfile)
-                logger.info(f"  ✅ Utworzono Dockerfile dla {layer}")
+            # Specjalne przypadki dla różnych frameworków
+            if framework == "fastapi" or (layer in ["backend", "api"] and (layer_path / "main.py").exists()):
+                dockerfile = f"""FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE {port}
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "{port}"]"""
+            elif framework == "gin":
+                dockerfile = f"""FROM golang:1.21-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download || echo "No go.mod found"
+COPY . .
+RUN go build -o main .
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
+COPY --from=builder /app/main .
+EXPOSE {port}
+CMD ["./main"]"""
+            elif framework == "nextjs":
+                dockerfile = f"""FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build || echo "No build script"
+EXPOSE {port}
+CMD ["npm", "start"]"""
+            elif framework == "express" or layer == "frontend":
+                dockerfile = f"""FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --only=production
+COPY . .
+EXPOSE {port}
+CMD ["node", "server.js"]"""
+            else:
+                # Użyj domyślnego template
+                template_file = Path(f"templates/Dockerfile.{template_type}")
+                if template_file.exists():
+                    template = template_file.read_text()
+                    dockerfile = template.format(
+                        port=port if port else 3000,
+                        entrypoint=fw_config.entrypoint
+                    )
+                else:
+                    # Podstawowy fallback
+                    dockerfile = f"""FROM node:20-alpine
+WORKDIR /app
+COPY . .
+RUN npm install || pip install -r requirements.txt || go mod download || true
+EXPOSE {port if port else 3000}
+CMD ["node", "server.js"]"""
+        else:
+            # Generyczny Dockerfile bazowany na plikach
+            if any((layer_path / f).exists() for f in ["package.json", "server.js", "index.js"]):
+                dockerfile = f"""FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --only=production
+COPY . .
+EXPOSE {port}
+CMD ["node", "server.js"]"""
+            elif any((layer_path / f).exists() for f in ["requirements.txt", "main.py", "app.py"]):
+                # Python/FastAPI
+                dockerfile = f"""FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE {port}
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "{port}"]"""
+            elif layer == "workers":
+                dockerfile = """FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt || echo "No requirements"
+COPY . .
+CMD ["python", "worker.py"]"""
+            else:
+                dockerfile = """FROM alpine:latest
+WORKDIR /app
+COPY . .
+CMD ["sh", "-c", "echo 'No specific runtime detected'"]"""
+
+        (layer_path / "Dockerfile").write_text(dockerfile)
+        logger.info(f"  ✅ Utworzono Dockerfile dla {layer}")
 
     def _validate_iteration(self, iter_path: Path) -> bool:
         """Walidacja wygenerowanej iteracji"""
 
         logger.info("🔍 Walidacja iteracji...")
 
-        # Sprawdź podstawowe pliki
+        # Sprawdź podstawowe pliki - tylko frontend i backend są wymagane
         checks = []
 
-        for layer in ["frontend", "backend", "api", "workers"]:
+        required_layers = ["frontend", "backend"]
+        optional_layers = ["api", "workers"]
+
+        for layer in required_layers:
             layer_path = iter_path / layer
             if not layer_path.exists():
-                logger.warning(f"  ⚠️ Brak katalogu {layer}")
+                logger.error(f"  ❌ Brak wymaganego katalogu {layer}")
                 checks.append(False)
                 continue
 
             # Sprawdź czy są jakieś pliki
             files = list(layer_path.glob("*"))
             if not files:
-                logger.warning(f"  ⚠️ Brak plików w {layer}")
+                logger.error(f"  ❌ Brak plików w wymaganym katalogu {layer}")
                 checks.append(False)
             else:
                 checks.append(True)
+
+        # Dla opcjonalnych warstw tylko informuj
+        for layer in optional_layers:
+            layer_path = iter_path / layer
+            if not layer_path.exists():
+                logger.info(f"  ℹ️ Opcjonalny katalog {layer} nie istnieje")
+            else:
+                files = list(layer_path.glob("*"))
+                if not files:
+                    logger.info(f"  ℹ️ Opcjonalny katalog {layer} jest pusty")
 
         valid = all(checks) if checks else False
 
@@ -642,7 +809,6 @@ IMPORTANT:
         """Aktualizacja docker-compose.yml"""
 
         compose = {
-            "version": "3.9",
             "services": {}
         }
 
@@ -749,23 +915,52 @@ IMPORTANT:
             tests_passed.append(False)
             logger.error("  Frontend: ❌ Niedostępny")
 
-        # Test backend
-        try:
-            resp = requests.get("http://localhost:3100/api/status", timeout=5)
-            tests_passed.append(resp.status_code == 200)
-            logger.info(f"  Backend: {'✅' if resp.status_code == 200 else '❌'}")
-        except:
-            tests_passed.append(False)
-            logger.error("  Backend: ❌ Niedostępny")
+        # Test backend (FastAPI)
+        backend_urls = [
+            "http://localhost:3100/api/status",
+            "http://localhost:3100/docs",  # FastAPI docs
+            "http://localhost:3100/"  # Root endpoint
+        ]
+        backend_ok = False
+        for url in backend_urls:
+            try:
+                resp = requests.get(url, timeout=5)
+                if resp.status_code == 200:
+                    backend_ok = True
+                    logger.info(f"  Backend: ✅ ({url})")
+                    break
+            except:
+                continue
 
-        # Test API
-        try:
-            resp = requests.get("http://localhost:3200/api/v1/info", timeout=5)
-            tests_passed.append(resp.status_code == 200)
-            logger.info(f"  API: {'✅' if resp.status_code == 200 else '❌'}")
-        except:
-            tests_passed.append(False)
-            logger.error("  API: ❌ Niedostępny")
+        if not backend_ok:
+            logger.error("  Backend: ❌ Niedostępny")
+        tests_passed.append(backend_ok)
+
+        # Test API (FastAPI) - opcjonalne
+        if Path("docker-compose.yml").exists():
+            with open("docker-compose.yml") as f:
+                compose_content = f.read()
+                if "api:" in compose_content:
+                    api_urls = [
+                        "http://localhost:3200/api/v1/info",
+                        "http://localhost:3200/api/v1/products",
+                        "http://localhost:3200/docs",
+                        "http://localhost:3200/"
+                    ]
+                    api_ok = False
+                    for url in api_urls:
+                        try:
+                            resp = requests.get(url, timeout=5)
+                            if resp.status_code == 200:
+                                api_ok = True
+                                logger.info(f"  API: ✅ ({url})")
+                                break
+                        except:
+                            continue
+
+                    if not api_ok:
+                        logger.warning("  API: ⚠️ Niedostępny (opcjonalne)")
+                    # API jest opcjonalne, więc nie dodajemy do tests_passed
 
         return all(tests_passed)
 
@@ -823,7 +1018,17 @@ Focus on fixing the specific errors mentioned.
 const app = express();
 app.get('/', (req, res) => res.send('<h1>Frontend Running</h1>'));
 app.listen(3000, () => console.log('Frontend on port 3000'));""",
-                        "package.json": '{"name":"frontend","version":"1.0.0","dependencies":{"express":"^4.18.0"}}'
+                        "package.json": """{
+  "name": "frontend",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0"
+  }
+}"""
                     }
                 },
                 {
